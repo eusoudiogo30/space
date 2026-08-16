@@ -1,0 +1,325 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String            @id @default(cuid())
+  name                String
+  email               String            @unique
+  passwordHash        String
+  coinBalance         Int               @default(100)
+  bestScore           Int               @default(0)
+  isActive            Boolean           @default(true)
+  isBlocked           Boolean           @default(false)
+  excludedFromRanking Boolean           @default(false)
+  lastLoginAt         DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  games               Game[]
+  transactions        CoinTransaction[]
+  deposits            Deposit[]
+  withdrawals         Withdrawal[]
+  alerts              FraudAlert[]
+  notes               UserNote[]
+
+  @@index([createdAt])
+}
+
+model Game {
+  id              String             @id @default(cuid())
+  userId          String
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameType        String             @default("BURACO_DOIDO")
+  configVersionId String?
+  configVersion   GameConfigVersion? @relation(fields: [configVersionId], references: [id])
+  status          String             @default("ACTIVE")
+  startedAt       DateTime           @default(now())
+  finishedAt      DateTime?
+  score           Int                @default(0)
+  stakeAmount     Int                @default(0)
+  earlyExit       Boolean            @default(false)
+  hits            Int                @default(0)
+  misses          Int                @default(0)
+  maxCombo        Int                @default(0)
+  coinsRewarded   Int                @default(0)
+  payoutMultiplier Float            @default(0)
+  rtpPercentage  Float              @default(80)
+  duration        Int                @default(30)
+  riskLevel       String             @default("LOW")
+  ip              String?
+  userAgent       String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  events          GameEvent[]
+  transactions    CoinTransaction[]
+  alerts          FraudAlert[]
+  reviews         GameReview[]
+
+  @@index([userId, finishedAt])
+  @@index([status, finishedAt])
+  @@index([configVersionId])
+  @@index([gameType, finishedAt])
+}
+
+model GameEvent {
+  id              String    @id @default(cuid())
+  gameId          String
+  game            Game      @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  sequence        Int
+  eventType       String
+  targetId        String
+  targetType      String
+  holeIndex       Int
+  clientTimestamp DateTime?
+  serverTimestamp DateTime  @default(now())
+  points          Int
+  combo           Int
+  metadata        String?
+
+  @@unique([gameId, sequence])
+  @@unique([gameId, targetId])
+  @@index([gameId, serverTimestamp])
+}
+
+model Admin {
+  id             String            @id @default(cuid())
+  name           String
+  email          String            @unique
+  passwordHash   String
+  role           String            @default("ANALYST")
+  isActive       Boolean           @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  sessions       AdminSession[]
+  auditLogs      AdminAuditLog[]
+  transactions   CoinTransaction[]
+  reviewedAlerts FraudAlert[]      @relation("FraudReviewer")
+  notes          UserNote[]
+  reviews        GameReview[]
+  rtpSettings    RtpSetting[]
+}
+
+model RtpSetting {
+  id         String   @id @default(cuid())
+  percentage Float    @default(80)
+  enabled    Boolean  @default(true)
+  isActive   Boolean  @default(true)
+  reason     String
+  adminId    String?
+  admin      Admin?   @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now())
+
+  @@index([isActive, createdAt])
+}
+
+model PaymentGatewaySetting {
+  id                    String   @id @default("ZYPHER")
+  enabled               Boolean  @default(false)
+  baseUrl               String   @default("https://api.zypher.global")
+  clientId              String?
+  clientSecretEncrypted String?
+  webhookUrl            String?
+  webhookTokenEncrypted String?
+  timeoutMs             Int      @default(10000)
+  splitUsername         String?
+  splitPercentage       Int      @default(0)
+  updatedAt             DateTime @updatedAt
+}
+
+model Deposit {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount      Int
+  status      String   @default("CONFIRMED")
+  provider    String   @default("DEMO")
+  reference   String   @unique
+  providerTransactionId String?
+  qrImage     String?
+  copyPaste   String?
+  endToEndId  String?
+  createdAt   DateTime @default(now())
+  confirmedAt DateTime?
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model Withdrawal {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount      Int
+  status      String   @default("COMPLETED")
+  provider    String   @default("DEMO")
+  reference   String   @unique
+  providerTransactionId String?
+  endToEndId  String?
+  destinationType String?
+  destinationLast4 String?
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model AdminSession {
+  id               String    @id @default(cuid())
+  adminId          String
+  admin            Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  refreshTokenHash String
+  ip               String?
+  userAgent        String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([adminId, expiresAt])
+}
+
+model AdminAuditLog {
+  id           String   @id @default(cuid())
+  adminId      String?
+  admin        Admin?   @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  action       String
+  resource     String
+  resourceId   String?
+  previousData String?
+  newData      String?
+  reason       String?
+  ip           String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model GameConfig {
+  id              String              @id @default(cuid())
+  name            String
+  activeVersionId String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  versions        GameConfigVersion[] @relation("ConfigVersions")
+}
+
+model GameConfigVersion {
+  id               String            @id @default(cuid())
+  gameConfigId     String
+  gameConfig       GameConfig        @relation("ConfigVersions", fields: [gameConfigId], references: [id], onDelete: Cascade)
+  version          Int
+  gameDuration     Int               @default(30)
+  holeCount        Int               @default(9)
+  minSpawnInterval Int               @default(90)
+  maxSpawnInterval Int               @default(200)
+  minVisibleTime   Int               @default(400)
+  maxVisibleTime   Int               @default(1200)
+  maximumScore     Int               @default(10000)
+  gameCost         Int               @default(0)
+  minimumStake     Int               @default(10)
+  maximumStake     Int               @default(500)
+  comboX2          Int               @default(5)
+  comboX3          Int               @default(10)
+  resetComboOnMiss Boolean           @default(true)
+  isActive         Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  characters       CharacterConfig[]
+  rewards          RewardRange[]
+  games            Game[]
+
+  @@unique([gameConfigId, version])
+}
+
+model CharacterConfig {
+  id                  String            @id @default(cuid())
+  gameConfigVersionId String
+  version             GameConfigVersion @relation(fields: [gameConfigVersionId], references: [id], onDelete: Cascade)
+  name                String
+  code                String
+  type                String
+  visual              String
+  frequency           Int
+  points              Int
+  timeBonus           Int               @default(0)
+  isActive            Boolean           @default(true)
+
+  @@unique([gameConfigVersionId, code])
+}
+
+model RewardRange {
+  id                  String            @id @default(cuid())
+  gameConfigVersionId String
+  version             GameConfigVersion @relation(fields: [gameConfigVersionId], references: [id], onDelete: Cascade)
+  minimumScore        Int
+  maximumScore        Int
+  coins               Int
+  createdAt           DateTime          @default(now())
+
+  @@index([gameConfigVersionId, minimumScore, maximumScore])
+}
+
+model CoinTransaction {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameId        String?
+  game          Game?    @relation(fields: [gameId], references: [id])
+  adminId       String?
+  admin         Admin?   @relation(fields: [adminId], references: [id])
+  type          String
+  amount        Int
+  balanceBefore Int
+  balanceAfter  Int
+  reason        String
+  createdAt     DateTime @default(now())
+
+  @@unique([gameId, type])
+  @@index([userId, createdAt])
+}
+
+model FraudAlert {
+  id                String    @id @default(cuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameId            String?
+  game              Game?     @relation(fields: [gameId], references: [id])
+  type              String
+  description       String
+  evidence          String?
+  riskLevel         String
+  status            String    @default("OPEN")
+  reviewedByAdminId String?
+  reviewedBy        Admin?    @relation("FraudReviewer", fields: [reviewedByAdminId], references: [id])
+  reviewedAt        DateTime?
+  createdAt         DateTime  @default(now())
+
+  @@index([status, riskLevel, createdAt])
+}
+
+model UserNote {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  adminId   String
+  admin     Admin    @relation(fields: [adminId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
+}
+
+model GameReview {
+  id        String   @id @default(cuid())
+  gameId    String
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  adminId   String
+  admin     Admin    @relation(fields: [adminId], references: [id])
+  status    String
+  note      String?
+  createdAt DateTime @default(now())
+}

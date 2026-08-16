@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1121.25 1078.91">
+  <defs>
+    <style>
+      .cls-bg { fill: url(#gBg); }
+      .cls-glow1 { fill: url(#gGlow1); opacity: .2; mix-blend-mode: screen; }
+      .cls-glow2 { fill: url(#gGlow2); opacity: .15; mix-blend-mode: screen; }
+      .cls-glow3 { fill: url(#gGlow3); opacity: .85; mix-blend-mode: screen; }
+      .cls-planet { fill: url(#gPlanet); }
+      .cls-star { fill: url(#gStar); mix-blend-mode: screen; }
+      .cls-starDot { fill: #ffdbdb; mix-blend-mode: screen; }
+    </style>
+    <linearGradient id="gBg" x1="704.88" y1="1078.91" x2="704.88" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4f004f"/>
+      <stop offset="1" stop-color="#0b1ca3"/>
+    </linearGradient>
+    <linearGradient id="gGlow1" x1="0" y1="777.95" x2="1007.86" y2="777.95" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#070019"/>
+      <stop offset="1" stop-color="#471e63"/>
+    </linearGradient>
+    <linearGradient id="gGlow2" x1="88.5" y1="701.85" x2="806.22" y2="701.85" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#070019"/>
+      <stop offset="1" stop-color="#1d6dae"/>
+    </linearGradient>
+    <radialGradient id="gGlow3" cx="616.74" cy="598.82" r="274.98" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#008e72"/>
+      <stop offset=".5" stop-color="#002f26"/>
+      <stop offset="1" stop-color="#000"/>
+    </radialGradient>
+    <radialGradient id="gPlanet" cx="616.74" cy="520" r="270" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4a2fbf"/>
+      <stop offset="1" stop-color="#1a0d55"/>
+    </radialGradient>
+    <radialGradient id="gStar" cx="0" cy="0" r="4" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00b359"/>
+      <stop offset=".5" stop-color="#005d2e"/>
+      <stop offset="1" stop-color="#000"/>
+    </radialGradient>
+  </defs>
+  <g id="space">
+    <rect class="cls-bg" x="60" y="0" width="1001" height="1078.91" rx="10" ry="10"/>
+    <path class="cls-glow1" d="m950.91,788.1c0-36.23,120.76-212.16-37.94-286.83-158.7-74.65-496.76,47.07-570.94,42.42-74.17-4.62-170.78-71.26-244.93-27.72-74.17,43.52-20.71,85.85-27.61,125.52-6.9,39.67-75.9,20.69-69.01,65.55,6.78,44.13,75.45,57.58,77.59,57.97-22.42-11.08-51.62-90.79,93.18-154.56,144.91-63.84,417.45-13.81,520.93,46.57,103.49,60.36,136.79,161.01,89.41,276.88-28.64,70.04-180.79,144.73-203.93,145.02l430.2-.48-2.92-236.87s-54.03-17.25-54.03-53.46Z"/>
+    <path class="cls-glow2" d="m88.5,629.98s37.88-57.25,80.38-67.81c42.5-10.56,84.02,12.13,109.32-3.73,25.3-15.86,43.7-38.86,120.74-33.68s111.54-6.23,111.54-6.23c0,0-78.2,22.32-87.4,34.4-9.2,12.07,56.64,43.32,171.2,9.24,162.43-48.33,182.57,126.24,204.31,203.62,21.74,77.38-9.99,119.36-9.99,119.36,0,0,20.86-81.54-30.89-145.36-51.75-63.82-144.49-18.97-239.56-69-95.07-50.02-260.59-102.34-429.67-40.82Z"/>
+    <ellipse class="cls-glow3" cx="615.7" cy="520.02" rx="274.98" ry="172.51"/>
+    <ellipse class="cls-planet" cx="595" cy="500" rx="190" ry="188"/>
+    <g id="starfield">
+      <circle class="cls-star" cx="822" cy="458" r="4.2"/>
+      <circle class="cls-star" cx="827" cy="441" r="4.2"/>
+      <circle class="cls-star" cx="824" cy="490" r="4.2"/>
+      <circle class="cls-star" cx="805" cy="438" r="11"/>
+      <circle class="cls-star" cx="863" cy="533" r="11"/>
+      <circle class="cls-star" cx="747" cy="420" r="5.4"/>
+      <circle class="cls-star" cx="837" cy="519" r="5.4"/>
+      <circle class="cls-star" cx="704" cy="318" r="2.7"/>
+      <circle class="cls-star" cx="745" cy="345" r="2.7"/>
+      <circle class="cls-star" cx="865" cy="484" r="2.7"/>
+      <circle class="cls-star" cx="828" cy="527" r="2"/>
+      <circle class="cls-star" cx="714" cy="314" r="4.2"/>
+      <circle class="cls-star" cx="879" cy="536" r="4.2"/>
+      <circle class="cls-star" cx="628" cy="230" r="2"/>
+      <circle class="cls-star" cx="672" cy="215" r="2"/>
+      <circle class="cls-star" cx="539" cy="724" r="2"/>
+      <circle class="cls-star" cx="640" cy="207" r="7"/>
+      <circle class="cls-star" cx="510" cy="775" r="7"/>
+      <circle class="cls-star" cx="590" cy="153" r="3.5"/>
+      <circle class="cls-star" cx="513" cy="746" r="3.5"/>
+      <circle class="cls-star" cx="811" cy="280" r="1.7"/>
+      <circle class="cls-star" cx="727" cy="141" r="1.7"/>
+      <circle class="cls-star" cx="848" cy="229" r="1.7"/>
+      <circle class="cls-star" cx="503" cy="737" r="1.2"/>
+      <circle class="cls-star" cx="831" cy="204" r="2.6"/>
+      <circle class="cls-star" cx="510" cy="788" r="2.6"/>
+    </g>
+    <g id="dust-motes">
+      <circle class="cls-starDot" cx="822" cy="458" r="1.2"/>
+      <circle class="cls-starDot" cx="827" cy="441" r="1.2"/>
+      <circle class="cls-starDot" cx="824" cy="490" r="1.2"/>
+      <circle class="cls-starDot" cx="806" cy="438" r="3.3"/>
+      <circle class="cls-starDot" cx="864" cy="534" r="3.3"/>
+      <circle class="cls-starDot" cx="748" cy="419" r="1.6"/>
+      <circle class="cls-starDot" cx="838" cy="518" r="1.6"/>
+      <circle class="cls-starDot" cx="704" cy="317" r=".8"/>
+      <circle class="cls-starDot" cx="745" cy="344" r=".8"/>
+      <circle class="cls-starDot" cx="865" cy="484" r=".8"/>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@500;600;700;800&family=Orbitron:wght@700;800;900&display=swap');
+
+:root { font-family: 'Nunito', system-ui, sans-serif; color: #eef0ff; background: #060421; font-synthesis: none; text-rendering: optimizeLegibility; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 3px solid #7ce8ff; outline-offset: 2px; }
+#root { min-height: 100vh; }
