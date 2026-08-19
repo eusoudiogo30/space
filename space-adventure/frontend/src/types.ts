@@ -16,7 +16,7 @@ export type MySummary = {
   totalWon: number
 }
 
-export type SkyObjectType = 'rock' | 'coin' | 'boost'
+export type SkyObjectType = 'rock' | 'coin' | 'boost' | 'gem'
 
 export type SkyObject = {
   id: string

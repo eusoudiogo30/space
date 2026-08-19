@@ -133,6 +133,13 @@ export function createAudioEngine() {
       tone(880, { type: 'square', attack: 0.004, decay: 0.09, peak: 0.16 })
       tone(1318.5, { type: 'square', attack: 0.004, decay: 0.16, peak: 0.14, delay: 0.05 })
     },
+    playGem() {
+      // sparkling 3-note ascending arpeggio — a bigger, brighter cousin of playCoin for the
+      // rare gem pickup, so it reads as a jackpot moment rather than another coin
+      tone(1046.5, { type: 'triangle', attack: 0.003, decay: 0.14, peak: 0.18 })
+      tone(1318.5, { type: 'triangle', attack: 0.003, decay: 0.14, peak: 0.18, delay: 0.07 })
+      tone(1568, { type: 'triangle', attack: 0.003, decay: 0.28, peak: 0.2, delay: 0.14 })
+    },
     playBoost() {
       // rising sawtooth through a sweeping bandpass filter — a quick power-up "whoosh"
       if (muted) return

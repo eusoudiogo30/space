@@ -15,8 +15,8 @@ export function progressiveRoundMultiplier(floor: number, multiplierPerFloor: nu
   return Math.min(MAX_PROGRESSIVE_MULTIPLIER, (1 + step) ** clearedFloors)
 }
 
-export type SpaceObjectType = 'rock' | 'coin' | 'boost'
-export type SpaceOutcome = 'collected' | 'boosted' | 'crashed' | 'dodged' | 'missed'
+export type SpaceObjectType = 'rock' | 'coin' | 'boost' | 'gem'
+export type SpaceOutcome = 'collected' | 'boosted' | 'crashed' | 'dodged' | 'missed' | 'gemmed'
 
 export type SpaceObject = {
   id: string
@@ -124,12 +124,19 @@ const PATH_CHECK_STEP_MS = 50
 // chance at the base rate.
 const BOOST_ROCK_WINDOW_MS = 1500
 
+// Gems are a rare upgrade rolled on top of a coin spawn, not a separate weighted slot — this
+// way they never touch the admin-tunable rock/coin/boost mix (which must sum to 100) or the
+// RTP math in deriveObjectFrequencies. Collecting one is worth 3 coins toward the multiplier.
+const GEM_UPGRADE_CHANCE = 0.15
+export const GEM_COMBO_VALUE = 3
+
 function rollType(config: SpaceEngineConfig, inTraining: boolean, nearBoost: boolean): SpaceObjectType {
-  if (inTraining) return Math.random() < config.boostFrequency / (config.coinFrequency + config.boostFrequency) ? 'boost' : 'coin'
+  const maybeGem = () => (Math.random() < GEM_UPGRADE_CHANCE ? 'gem' : 'coin')
+  if (inTraining) return Math.random() < config.boostFrequency / (config.coinFrequency + config.boostFrequency) ? 'boost' : maybeGem()
   const rockFrequency = nearBoost ? config.boostRockFrequency : config.rockFrequency
   const roll = Math.random() * (rockFrequency + config.coinFrequency + config.boostFrequency)
   if (roll < rockFrequency) return 'rock'
-  if (roll < rockFrequency + config.coinFrequency) return 'coin'
+  if (roll < rockFrequency + config.coinFrequency) return maybeGem()
   return 'boost'
 }
 
@@ -276,6 +283,12 @@ function resolveOne(session: SpaceSession, target: SpaceObject, nowElapsed: numb
     session.maxCombo = Math.max(session.maxCombo, session.combo)
     session.score = Math.min(session.config.maximumScore, session.score + 10)
     outcome = 'collected'
+  } else if (collided && target.type === 'gem') {
+    session.combo += GEM_COMBO_VALUE
+    session.hits += GEM_COMBO_VALUE
+    session.maxCombo = Math.max(session.maxCombo, session.combo)
+    session.score = Math.min(session.config.maximumScore, session.score + 10 * GEM_COMBO_VALUE)
+    outcome = 'gemmed'
   } else if (collided && target.type === 'boost') {
     session.boostActiveUntilElapsed = evalEnd + session.config.boostDurationMs
     outcome = 'boosted'

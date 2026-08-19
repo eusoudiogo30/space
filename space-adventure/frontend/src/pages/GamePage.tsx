@@ -4,7 +4,7 @@ import { Icon } from '../components/Icon'
 import { api } from '../services/api'
 import type { ActiveRound, FlightStats, GameConfig, SkyObject, SkyObjectType } from '../types'
 
-type SkyOutcome = 'collected' | 'boosted' | 'crashed' | 'dodged' | 'missed'
+type SkyOutcome = 'collected' | 'boosted' | 'crashed' | 'dodged' | 'missed' | 'gemmed'
 type RenderObject = SkyObject & { cssDelay: number; cssDuration: number }
 
 const SPEED_PARTICLE_COUNT = 16
@@ -33,6 +33,7 @@ const ART: Record<SkyObjectType, string | string[]> = {
   coin: '/game/coin.svg',
   boost: '/game/boost.svg',
   rock: ['/game/rock-1.svg', '/game/rock-2.svg', '/game/rock-3.svg'],
+  gem: ['/game/gem-gold.svg', '/game/gem-blue.svg', '/game/gem-pink.svg'],
 }
 
 function artFor(obj: SkyObject) {
@@ -62,9 +63,16 @@ const MIN_SEPARATION = 0.38
 // ones (see BOOST_ROCK_WINDOW_MS in backend/src/services/spaceEngine.ts).
 const BOOST_ROCK_WINDOW_MS = 1500
 
+// Gems are a rare upgrade rolled on top of a coin spawn (never a separate weighted slot) — this
+// mirrors backend/src/services/spaceEngine.ts exactly, so free play's odds and real-money
+// rounds feel the same. Collecting one is worth 3 coins toward the multiplier.
+const GEM_UPGRADE_CHANCE = 0.15
+const GEM_COMBO_VALUE = 3
+
 function localSchedule(gameDuration: number, trainingMs: number, minFallMs: number, maxFallMs: number, spawnGapMs: number, weights: { type: SkyObjectType; weight: number }[], boostRockWeight: number): SkyObject[] {
   const objects: SkyObject[] = []
   const totalMs = gameDuration * 1000
+  const maybeGem = (type: SkyObjectType): SkyObjectType => (type === 'coin' && Math.random() < GEM_UPGRADE_CHANCE ? 'gem' : type)
   const rollType = (inTraining: boolean, nearBoost: boolean): SkyObjectType => {
     const effective = weights.map((w) => w.type === 'rock' && nearBoost ? { type: w.type, weight: boostRockWeight } : w)
     const totalWeight = effective.reduce((sum, w) => sum + w.weight, 0)
@@ -72,13 +80,13 @@ function localSchedule(gameDuration: number, trainingMs: number, minFallMs: numb
     if (inTraining) {
       const roll = Math.random() * trainingWeight
       let acc = 0
-      for (const w of effective) { if (w.type === 'rock') continue; acc += w.weight; if (roll < acc) return w.type }
-      return 'coin'
+      for (const w of effective) { if (w.type === 'rock') continue; acc += w.weight; if (roll < acc) return maybeGem(w.type) }
+      return maybeGem('coin')
     }
     const roll = Math.random() * totalWeight
     let acc = 0
-    for (const w of effective) { acc += w.weight; if (roll < acc) return w.type }
-    return 'coin'
+    for (const w of effective) { acc += w.weight; if (roll < acc) return maybeGem(w.type) }
+    return maybeGem('coin')
   }
   const randomX = () => EDGE_MARGIN + Math.random() * (1 - EDGE_MARGIN * 2)
 
@@ -229,6 +237,7 @@ export function GamePage({ stakeAmount, activeRound, config, onFinish, onExit }:
   function applyOutcome(outcome: string, didCrash: boolean) {
     if (didCrash) { setFeedback('💥 Colidiu!'); setFeedbackTone('danger'); audioRef.current?.playCrash(); if (navigator.vibrate) navigator.vibrate([60, 40, 90]); return }
     if (outcome === 'collected') { setFeedback('Moeda coletada!'); setFeedbackTone('gold'); audioRef.current?.playCoin(); if (navigator.vibrate) navigator.vibrate(20); return }
+    if (outcome === 'gemmed') { setFeedback(`💎 Gema rara! +${GEM_COMBO_VALUE} combo`); setFeedbackTone('gold'); audioRef.current?.playGem(); if (navigator.vibrate) navigator.vibrate([20, 30, 20, 30, 40]); return }
     if (outcome === 'boosted') { setFeedback('⚡ Invencível por 3s!'); setFeedbackTone('gold'); audioRef.current?.playBoost(); if (navigator.vibrate) navigator.vibrate(30); return }
     if (outcome === 'dodged') { setFeedback('Desviou!'); setFeedbackTone(''); return }
     setFeedback('')
@@ -252,6 +261,7 @@ export function GamePage({ stakeAmount, activeRound, config, onFinish, onExit }:
     const boosted = Date.now() < boostUntilRef.current
     if (collided && obj.type === 'rock' && !boosted) return 'crashed'
     if (collided && obj.type === 'coin') return 'collected'
+    if (collided && obj.type === 'gem') return 'gemmed'
     if (collided && obj.type === 'boost') return 'boosted'
     if (obj.type !== 'rock') return 'missed'
     return 'dodged'
@@ -273,6 +283,9 @@ export function GamePage({ stakeAmount, activeRound, config, onFinish, onExit }:
     }
     if (outcome === 'collected') {
       setStats((old) => { const combo = old.combo + 1; return { hits: old.hits + 1, misses: old.misses, combo, maxCombo: Math.max(old.maxCombo, combo) } })
+    }
+    if (outcome === 'gemmed') {
+      setStats((old) => { const combo = old.combo + GEM_COMBO_VALUE; return { hits: old.hits + GEM_COMBO_VALUE, misses: old.misses, combo, maxCombo: Math.max(old.maxCombo, combo) } })
     }
     if (outcome === 'missed') {
       setStats((old) => ({ ...old, misses: old.misses + 1 }))
