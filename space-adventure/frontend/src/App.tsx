@@ -57,6 +57,14 @@ export default function App() {
     return () => window.clearTimeout(timer)
   }, [screen])
 
+  // The home screen is a full-width marketing landing page on desktop, unlike every other
+  // screen (game, loading, modals-as-pages), which stay inside the narrow phone-style frame —
+  // see the `body.landing-mode` override in App.css.
+  useEffect(() => {
+    document.body.classList.toggle('landing-mode', screen === 'home')
+    return () => document.body.classList.remove('landing-mode')
+  }, [screen])
+
   const beginBet = async (betValue: number) => {
     setMessage('')
     if (!user) {
