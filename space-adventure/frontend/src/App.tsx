@@ -4,6 +4,7 @@ import { AuthModal } from './components/AuthModal'
 import { DepositModal } from './components/DepositModal'
 import { ProfileModal } from './components/ProfileModal'
 import { ReferralModal } from './components/ReferralModal'
+import { WithdrawModal } from './components/WithdrawModal'
 import { GamePage } from './pages/GamePage'
 import { HomePage } from './pages/HomePage'
 import { ResultPage } from './pages/ResultPage'
@@ -25,6 +26,7 @@ export default function App() {
   const [depositOpen, setDepositOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [referralOpen, setReferralOpen] = useState(false)
+  const [withdrawOpen, setWithdrawOpen] = useState(false)
 
   const [config, setConfig] = useState<GameConfig | null>(null)
   const [selectedBet, setSelectedBet] = useState<number | null>(10)
@@ -199,6 +201,7 @@ export default function App() {
       {depositOpen && <DepositModal onClose={() => setDepositOpen(false)} onUser={setUser} />}
       {profileOpen && user && <ProfileModal user={user} onClose={() => setProfileOpen(false)} onUser={setUser} />}
       {referralOpen && <ReferralModal onClose={() => setReferralOpen(false)} onUser={setUser} />}
+      {withdrawOpen && <WithdrawModal onClose={() => setWithdrawOpen(false)} />}
     </>
   )
 
@@ -218,6 +221,7 @@ export default function App() {
         onOpenDeposit={() => setDepositOpen(true)}
         onOpenProfile={() => setProfileOpen(true)}
         onOpenReferral={() => setReferralOpen(true)}
+        onOpenWithdraw={() => setWithdrawOpen(true)}
         onLogout={logout}
       />
       {modals}

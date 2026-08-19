@@ -1,4 +1,4 @@
-export type IconName = 'chevron-left' | 'chevron-right' | 'chevron-down' | 'close' | 'timer' | 'volume' | 'volume-off' | 'flame' | 'cashout' | 'mail' | 'lock' | 'user' | 'phone' | 'home' | 'users' | 'settings' | 'logout' | 'share' | 'copy' | 'wallet' | 'card-id' | 'eye' | 'eye-off' | 'gift' | 'check' | 'rocket'
+export type IconName = 'chevron-left' | 'chevron-right' | 'chevron-down' | 'close' | 'timer' | 'volume' | 'volume-off' | 'flame' | 'cashout' | 'mail' | 'lock' | 'user' | 'phone' | 'home' | 'users' | 'settings' | 'logout' | 'share' | 'copy' | 'wallet' | 'card-id' | 'eye' | 'eye-off' | 'gift' | 'check' | 'rocket' | 'chest'
 
 export function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
   const common = {
@@ -210,6 +210,16 @@ export function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
           <rect x="3" y="8.5" width="18" height="4" rx="1" />
           <path d="M12 8.5V21M4 12.5V19a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-6.5" />
           <path d="M12 8.5c-1.5 0-3-1-3.5-2.5C8 4.5 9 3.5 10.2 3.5c1.4 0 1.8 1.4 1.8 2.5v2.5Zm0 0c1.5 0 3-1 3.5-2.5.5-1.5-.5-2.5-1.7-2.5-1.4 0-1.8 1.4-1.8 2.5v2.5Z" />
+        </svg>
+      )
+
+    case 'chest':
+      return (
+        <svg {...common}>
+          <path d="M4 10.5a2.5 2.5 0 0 1 2.5-2.5h11A2.5 2.5 0 0 1 20 10.5V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18Z" />
+          <path d="M4 13.2h16" />
+          <path d="M9.5 13.2v-1a2.5 2.5 0 0 1 5 0v1" />
+          <circle cx="12" cy="13.2" r="1.1" fill="currentColor" stroke="none" />
         </svg>
       )
   }

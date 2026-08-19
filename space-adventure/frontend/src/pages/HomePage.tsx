@@ -17,6 +17,7 @@ type Props = {
   onOpenDeposit: () => void
   onOpenProfile: () => void
   onOpenReferral: () => void
+  onOpenWithdraw: () => void
   onLogout: () => void
 }
 
@@ -47,7 +48,7 @@ function useOnlineCounter(base = 1103) {
 
 export function HomePage({
   user, config, selectedBet, starting, message,
-  onSelectBet, onPlay, onFreePlay, onLogin, onRegister, onOpenDeposit, onOpenProfile, onOpenReferral, onLogout,
+  onSelectBet, onPlay, onFreePlay, onLogin, onRegister, onOpenDeposit, onOpenProfile, onOpenReferral, onOpenWithdraw, onLogout,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const balance = user?.coins ?? 0
@@ -73,7 +74,7 @@ export function HomePage({
                 <Icon name="chevron-down" size={13} />
               </button>
               <button className="header-action header-action--deposit" onClick={onOpenDeposit}><Icon name="wallet" size={15} /> <span>Depositar</span></button>
-              <button className="header-action header-action--withdraw" onClick={onOpenProfile}><Icon name="cashout" size={15} /> <span>Sacar</span></button>
+              <button className="header-action header-action--withdraw" onClick={onOpenWithdraw}><Icon name="cashout" size={15} /> <span>Sacar</span></button>
               <button className="pill-button pill-button--avatar" onClick={() => setMenuOpen(true)}>{(user.username || user.name?.trim() || '?').slice(0, 1).toUpperCase()}</button>
               {menuOpen && (
                 <ProfileMenu
@@ -149,75 +150,80 @@ export function HomePage({
         </section>
       )}
 
-      <section className="rules-section">
-        <div className="rules-grid">
-          <div className="rule-tile">
-            <img className="rule-tile__icon" src="/game/coin.svg" alt="" />
-            <strong className="positive">+multiplicador</strong>
-            <small>Moeda coletada</small>
+      {!user && (
+        <section className="rules-section">
+          <div className="rules-grid">
+            <div className="rule-tile">
+              <img className="rule-tile__icon" src="/game/coin.svg" alt="" />
+              <strong className="positive">+multiplicador</strong>
+              <small>Moeda coletada</small>
+            </div>
+            <div className="rule-tile">
+              <img className="rule-tile__icon" src="/game/boost.svg" alt="" />
+              <strong className="positive">3s invencível</strong>
+              <small>Boost coletado</small>
+            </div>
+            <div className="rule-tile">
+              <img className="rule-tile__icon" src="/game/rock-1.svg" alt="" />
+              <strong className="negative">perde tudo</strong>
+              <small>Bateu na pedra</small>
+            </div>
           </div>
-          <div className="rule-tile">
-            <img className="rule-tile__icon" src="/game/boost.svg" alt="" />
-            <strong className="positive">3s invencível</strong>
-            <small>Boost coletado</small>
-          </div>
-          <div className="rule-tile">
-            <img className="rule-tile__icon" src="/game/rock-1.svg" alt="" />
-            <strong className="negative">perde tudo</strong>
-            <small>Bateu na pedra</small>
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {user && (
         <section className="bet-card" id="bet-card" ref={betCardRef}>
-          <div className="bet-banner">
-            <span className="online-badge online-badge--overlay"><i /> Online</span>
-            <b>DESVIE DAS PEDRAS E GANHE R$</b>
+          <div className="bet-card__glow" aria-hidden="true" />
+          <div className="bet-card__inner">
+            <div className="bet-banner">
+              <span className="online-badge online-badge--overlay"><i /> Online</span>
+              <b>DESVIE DAS PEDRAS E GANHE R$</b>
+            </div>
+            <div className="bet-head">
+              <div><h2><img className="bet-head__icon" src="/game/coin.svg" alt="" /> INICIAR VOO</h2><p>Escolha sua entrada e tente pousar com o maior multiplicador!</p></div>
+            </div>
+
+            <div className="bet-label"><span>ENTRADA</span></div>
+            <div className="bet-grid">
+              {bets.map((value) => (
+                <button
+                  key={value}
+                  className={`bet-option ${selectedBet === value ? 'selected' : ''}`}
+                  onClick={() => onSelectBet(value)}
+                >
+                  R$ {value.toFixed(2).replace('.', ',')}
+                </button>
+              ))}
+            </div>
+
+            <div className="selected-amount" aria-live="polite">
+              <span>R$</span>
+              <strong>{selectedBet === null ? '—' : selectedBet.toFixed(2).replace('.', ',')}</strong>
+            </div>
+
+            {insufficientBalance && (
+              <p className="insufficient-balance">◉ Saldo insuficiente. Deposite para continuar.</p>
+            )}
+            <p className="your-balance">Seu saldo: <b>R$ {(balance / 100).toFixed(2).replace('.', ',')}</b></p>
+
+            <button
+              className="play-button"
+              disabled={starting || selectedBet === null}
+              onClick={() => {
+                if (selectedBet === null) return
+                if (insufficientBalance) { onOpenDeposit(); return }
+                onPlay(selectedBet)
+              }}
+            >
+              {starting ? 'PREPARANDO DECOLAGEM...' :
+               selectedBet === null ? 'ESCOLHA UM VALOR' :
+               insufficientBalance ? 'DEPOSITAR PARA JOGAR' :
+               'DECOLAR'}
+            </button>
+
+            {message && <p className="lobby-message" role="alert">{message}</p>}
           </div>
-          <div className="bet-head">
-            <div><h2><img className="bet-head__icon" src="/game/coin.svg" alt="" /> INICIAR VOO</h2><p>Escolha sua entrada e tente pousar com o maior multiplicador!</p></div>
-          </div>
-
-          <div className="bet-label"><span>ENTRADA</span></div>
-          <div className="bet-grid">
-            {bets.map((value) => (
-              <button
-                key={value}
-                className={`bet-option ${selectedBet === value ? 'selected' : ''}`}
-                onClick={() => onSelectBet(value)}
-              >
-                R$ {value.toFixed(2).replace('.', ',')}
-              </button>
-            ))}
-          </div>
-
-          <div className="selected-amount" aria-live="polite">
-            <span>R$</span>
-            <strong>{selectedBet === null ? '—' : selectedBet.toFixed(2).replace('.', ',')}</strong>
-          </div>
-
-          {insufficientBalance && (
-            <p className="insufficient-balance">◉ Saldo insuficiente. Deposite para continuar.</p>
-          )}
-          <p className="your-balance">Seu saldo: <b>R$ {(balance / 100).toFixed(2).replace('.', ',')}</b></p>
-
-          <button
-            className="play-button"
-            disabled={starting || selectedBet === null}
-            onClick={() => {
-              if (selectedBet === null) return
-              if (insufficientBalance) { onOpenDeposit(); return }
-              onPlay(selectedBet)
-            }}
-          >
-            {starting ? 'PREPARANDO DECOLAGEM...' :
-             selectedBet === null ? 'ESCOLHA UM VALOR' :
-             insufficientBalance ? '💳 DEPOSITAR PARA JOGAR' :
-             '🚀 DECOLAR'}
-          </button>
-
-          {message && <p className="lobby-message" role="alert">{message}</p>}
         </section>
       )}
 
@@ -288,10 +294,16 @@ export function HomePage({
         {user ? (
           <>
             <button onClick={onOpenDeposit}><Icon name="wallet" size={19} /><small>Depositar</small></button>
-            <button onClick={onOpenReferral}><Icon name="gift" size={19} /><small>Indique</small></button>
-            <button className="mobile-bottom-nav__main" onClick={scrollToBet} aria-label="Jogar"><span className="mobile-bottom-nav__ring" /><Icon name="rocket" size={24} /></button>
+            <button onClick={onOpenWithdraw}><Icon name="cashout" size={19} /><small>Sacar</small></button>
+            <button className="mobile-bottom-nav__main-wrap" onClick={scrollToBet} aria-label="Jogar">
+              <span className="mobile-bottom-nav__main">
+                <span className="mobile-bottom-nav__ring" />
+                <Icon name="rocket" size={22} />
+              </span>
+              <small>Jogar</small>
+            </button>
+            <button onClick={onOpenReferral}><Icon name="chest" size={19} /><small>Baús</small></button>
             <button onClick={onOpenProfile}><Icon name="user" size={19} /><small>Perfil</small></button>
-            <button onClick={onLogout}><Icon name="logout" size={19} /><small>Sair</small></button>
           </>
         ) : (
           <>
