@@ -3,9 +3,11 @@ import { rateLimit } from 'express-rate-limit'
 import { z } from 'zod'
 import { prisma } from '../db.js'
 import { authenticate } from '../middleware/auth.js'
-import { DEFAULT_MULTIPLIER_PER_FLOOR } from '../services/gameEngine.js'
+import { getPlatformSettings } from '../services/platformSettings.js'
 import {
+  DEFAULT_MULTIPLIER_PER_FLOOR,
   defaults,
+  deriveObjectFrequencies,
   finishSession,
   getSession,
   moveShip,
@@ -29,24 +31,54 @@ async function getRtpPercentage() {
   return 80
 }
 
+// Difficulty (fall speed, spawn pacing, ramp-up window, hit radius, boost duration, and the base
+// rock/coin/boost mix) is admin-configurable via SpaceDifficultySetting. RTP + influencer apply a
+// modest nudge on top, see deriveObjectFrequencies.
+async function getSpaceDifficulty() {
+  try {
+    const setting = await prisma.spaceDifficultySetting.findUnique({ where: { id: 'MAIN' } })
+    if (setting) return setting
+  } catch {
+    // table may not exist yet
+  }
+  return null
+}
+
 // GET /api/space/config - Game configuration (public)
 spaceRouter.get('/config', asyncHandler(async (_req, res) => {
+  const settings = await getPlatformSettings()
+  const difficulty = await getSpaceDifficulty()
+  // Free/demo flights run entirely client-side (no server round-trip per object, unlike real
+  // rounds) so their rock/coin/boost mix has to travel here instead — nudged by freeRtpPercentage
+  // the same way a real round's mix is nudged by the real-money RTP, but tuned independently
+  // since the free funnel's win rate is a marketing lever, not a payout guarantee.
+  const freeMix = deriveObjectFrequencies(
+    difficulty ? { rockFrequency: difficulty.rockFrequency, coinFrequency: difficulty.coinFrequency, boostFrequency: difficulty.boostFrequency } : defaults,
+    difficulty?.freeRtpPercentage ?? 80, false,
+  )
   res.json({
     version: 1,
-    minimumBet: '5.00',
-    maximumBet: '250.00',
-    suggestedBets: [5, 10, 20, 50, 100, 200, 250].map((v) => v.toFixed(2)),
+    minimumBet: (settings.minimumBet / 100).toFixed(2),
+    maximumBet: (settings.maximumBet / 100).toFixed(2),
+    minimumDeposit: (settings.minimumDeposit / 100).toFixed(2),
+    maximumDeposit: (settings.maximumDeposit / 100).toFixed(2),
+    suggestedBets: settings.suggestedBets.map((v) => (v / 100).toFixed(2)),
     rtpPercentage: await getRtpPercentage(),
     gameDuration: defaults.gameDuration,
     realGameDuration: defaults.realGameDuration,
     trainingMs: defaults.trainingMs,
-    minFallMs: defaults.minFallMs,
-    maxFallMs: defaults.maxFallMs,
-    spawnGapMs: defaults.spawnGapMs,
-    hitRadius: defaults.hitRadius,
-    hitRadiusY: defaults.hitRadiusY,
-    boostDurationMs: defaults.boostDurationMs,
-    multiplierPerFloor: DEFAULT_MULTIPLIER_PER_FLOOR,
+    minFallMs: difficulty?.minFallMs ?? defaults.minFallMs,
+    maxFallMs: difficulty?.maxFallMs ?? defaults.maxFallMs,
+    spawnGapMs: difficulty?.spawnGapMs ?? defaults.spawnGapMs,
+    hitRadius: difficulty?.hitRadius ?? defaults.hitRadius,
+    hitRadiusY: difficulty?.hitRadiusY ?? defaults.hitRadiusY,
+    boostDurationMs: difficulty?.boostDurationMs ?? defaults.boostDurationMs,
+    multiplierPerFloor: difficulty?.multiplierPerFloor ?? DEFAULT_MULTIPLIER_PER_FLOOR,
+    shipSpeed: difficulty?.shipSpeed ?? 1.35,
+    rockFrequency: freeMix.rockFrequency,
+    coinFrequency: freeMix.coinFrequency,
+    boostFrequency: freeMix.boostFrequency,
+    boostRockFrequency: difficulty?.boostRockFrequency ?? defaults.boostRockFrequency,
   })
 }))
 
@@ -57,10 +89,11 @@ spaceRouter.use(rateLimit({ windowMs: 60_000, limit: 240, standardHeaders: 'draf
 spaceRouter.post('/rounds', asyncHandler(async (req, res) => {
   const { bet } = z.object({ bet: z.number().min(1).max(100000).default(10) }).parse(req.body)
   const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId! } })
+  const settings = await getPlatformSettings()
 
   const betCents = Math.round(bet * 100)
-  const minimumBetCents = 5 * 100
-  const maximumBetCents = 250 * 100
+  const minimumBetCents = settings.minimumBet
+  const maximumBetCents = settings.maximumBet
 
   if (betCents < minimumBetCents || betCents > maximumBetCents) {
     throw new HttpError(422, `A entrada deve ficar entre R$ ${(minimumBetCents / 100).toFixed(2)} e R$ ${(maximumBetCents / 100).toFixed(2)}`)
@@ -75,6 +108,7 @@ spaceRouter.post('/rounds', asyncHandler(async (req, res) => {
   })
 
   const rtpPercentage = await getRtpPercentage()
+  const difficulty = await getSpaceDifficulty()
 
   const game = await prisma.$transaction(async (tx) => {
     const created = await tx.game.create({
@@ -109,7 +143,19 @@ spaceRouter.post('/rounds', asyncHandler(async (req, res) => {
     return created
   })
 
-  const session = startSession(game.id, req.userId!, betCents, realModeConfig, DEFAULT_MULTIPLIER_PER_FLOOR)
+  const roundConfig = {
+    ...realModeConfig,
+    ...(difficulty ? {
+      minFallMs: difficulty.minFallMs, maxFallMs: difficulty.maxFallMs, spawnGapMs: difficulty.spawnGapMs, rampWindowMs: difficulty.rampWindowMs,
+      boostDurationMs: difficulty.boostDurationMs, maximumScore: difficulty.maximumScore, hitRadius: difficulty.hitRadius, hitRadiusY: difficulty.hitRadiusY,
+      boostRockFrequency: difficulty.boostRockFrequency,
+    } : {}),
+    ...deriveObjectFrequencies(
+      difficulty ? { rockFrequency: difficulty.rockFrequency, coinFrequency: difficulty.coinFrequency, boostFrequency: difficulty.boostFrequency } : defaults,
+      rtpPercentage, user.isInfluencer,
+    ),
+  }
+  const session = startSession(game.id, req.userId!, betCents, roundConfig, difficulty?.multiplierPerFloor ?? DEFAULT_MULTIPLIER_PER_FLOOR)
 
   res.status(201).json({
     round: {

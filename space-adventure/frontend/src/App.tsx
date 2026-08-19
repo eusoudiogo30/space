@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import './App.css'
-import { AccountPage } from './pages/AccountPage'
+import { AuthModal } from './components/AuthModal'
+import { DepositModal } from './components/DepositModal'
+import { ProfileModal } from './components/ProfileModal'
+import { ReferralModal } from './components/ReferralModal'
 import { GamePage } from './pages/GamePage'
 import { HomePage } from './pages/HomePage'
 import { ResultPage } from './pages/ResultPage'
@@ -8,7 +11,7 @@ import { TutorialPage } from './pages/TutorialPage'
 import { api } from './services/api'
 import type { ActiveRound, FlightStats, GameConfig, User } from './types'
 
-type Screen = 'home' | 'tutorial' | 'loading' | 'game' | 'result' | 'account'
+type Screen = 'home' | 'tutorial' | 'loading' | 'game'
 type PendingPlay = { type: 'bet'; value: number } | { type: 'free' }
 const LOADING_MS = 1400
 const TUTORIAL_KEY = 'space-adventure-tutorial-dismissed'
@@ -18,6 +21,10 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null)
   const [result, setResult] = useState<FlightStats | null>(null)
   const [stakeAmount, setStakeAmount] = useState(10)
+  const [authMode, setAuthMode] = useState<'login' | 'register' | null>(null)
+  const [depositOpen, setDepositOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [referralOpen, setReferralOpen] = useState(false)
 
   const [config, setConfig] = useState<GameConfig | null>(null)
   const [selectedBet, setSelectedBet] = useState<number | null>(10)
@@ -58,6 +65,11 @@ export default function App() {
     }
     setStarting(true)
     try {
+      // Difficulty/RTP config is admin-editable and can change between page loads — refetch
+      // right before a real round starts so the client's local collision prediction never
+      // drifts from what the server actually used to build this round's objects.
+      const freshConfig = await api.getConfig().catch(() => null)
+      if (freshConfig) setConfig(freshConfig)
       const { round } = await api.startRound(betValue)
       setActiveRound(round)
       setStakeAmount(betValue)
@@ -103,15 +115,30 @@ export default function App() {
     else beginFree()
   }
 
+  // "Jogar novamente" must restart the same mode the player was just in — a real bet stays a
+  // real bet, free play stays free play — instead of always dropping back to free play.
+  const playAgain = () => {
+    setResult(null)
+    if (stakeAmount > 0) start(stakeAmount)
+    else freePlay()
+  }
+
   const finish = useCallback(async (stats: FlightStats) => {
     setResult(stats)
-    setScreen('result')
+    setScreen('home')
   }, [])
 
   const reset = () => {
     setScreen('home')
     setActiveRound(null)
     setMessage('')
+    setResult(null)
+  }
+
+  const logout = () => {
+    api.logout()
+    setUser(null)
+    reset()
   }
 
   if (screen === 'tutorial') {
@@ -142,32 +169,50 @@ export default function App() {
     )
   }
 
-  if (screen === 'result' && result) {
-    return (
-      <ResultPage
-        stats={result}
-        user={user}
-        onAgain={freePlay}
-        onHome={reset}
-      />
-    )
-  }
-
-  if (screen === 'account') {
-    return <AccountPage user={user} onUser={setUser} onBack={() => setScreen('home')} />
-  }
+  const modals = (
+    <>
+      {result && (
+        <ResultPage
+          stats={result}
+          user={user}
+          onAgain={playAgain}
+          onHome={reset}
+          onCreateAccount={() => setAuthMode('register')}
+        />
+      )}
+      {authMode && (
+        <AuthModal
+          mode={authMode}
+          onModeChange={setAuthMode}
+          onClose={() => setAuthMode(null)}
+          onUser={(u) => { setUser(u); setAuthMode(null); setResult(null) }}
+        />
+      )}
+      {depositOpen && <DepositModal onClose={() => setDepositOpen(false)} onUser={setUser} />}
+      {profileOpen && user && <ProfileModal user={user} onClose={() => setProfileOpen(false)} onUser={setUser} />}
+      {referralOpen && <ReferralModal onClose={() => setReferralOpen(false)} onUser={setUser} />}
+    </>
+  )
 
   return (
-    <HomePage
-      user={user}
-      config={config}
-      selectedBet={selectedBet}
-      starting={starting}
-      message={message}
-      onSelectBet={(value) => setSelectedBet(value)}
-      onPlay={start}
-      onFreePlay={freePlay}
-      onAccount={() => setScreen('account')}
-    />
+    <>
+      <HomePage
+        user={user}
+        config={config}
+        selectedBet={selectedBet}
+        starting={starting}
+        message={message}
+        onSelectBet={(value) => setSelectedBet(value)}
+        onPlay={start}
+        onFreePlay={freePlay}
+        onLogin={() => setAuthMode('login')}
+        onRegister={() => setAuthMode('register')}
+        onOpenDeposit={() => setDepositOpen(true)}
+        onOpenProfile={() => setProfileOpen(true)}
+        onOpenReferral={() => setReferralOpen(true)}
+        onLogout={logout}
+      />
+      {modals}
+    </>
   )
 }

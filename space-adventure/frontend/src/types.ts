@@ -1,10 +1,19 @@
 export type User = {
   id: string
   name: string
-  email: string
+  username: string | null
+  phone?: string | null
+  document?: string | null
+  email: string | null
   coins: number
   bestScore: number
   createdAt: string
+}
+
+export type MySummary = {
+  totalDeposited: number
+  totalWithdrawn: number
+  totalWon: number
 }
 
 export type SkyObjectType = 'rock' | 'coin' | 'boost'
@@ -21,6 +30,8 @@ export type GameConfig = {
   version: number
   minimumBet: string
   maximumBet: string
+  minimumDeposit: string
+  maximumDeposit: string
   suggestedBets: string[]
   rtpPercentage: number
   gameDuration: number
@@ -33,6 +44,11 @@ export type GameConfig = {
   hitRadiusY: number
   boostDurationMs: number
   multiplierPerFloor: number
+  rockFrequency: number
+  coinFrequency: number
+  boostFrequency: number
+  boostRockFrequency: number
+  shipSpeed: number
 }
 
 export type ActiveRound = {
@@ -59,6 +75,17 @@ export type RoundResult = {
   misses: number
   maxCombo: number
   crashed: boolean
+}
+
+export type MyAffiliate = {
+  code: string
+  status: string
+  cpaAmount: number
+  availableBalance: number
+  withdrawnBalance: number
+  referralsCount: number
+  firstDepositsCount: number
+  totalReferredDeposits: number
 }
 
 export type FlightStats = {

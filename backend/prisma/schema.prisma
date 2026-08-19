@@ -3,20 +3,28 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
 model User {
   id                  String            @id @default(cuid())
   name                String
-  email               String            @unique
+  username            String?           @unique
+  phone               String?
+  document            String?
+  email               String?           @unique
   passwordHash        String
-  coinBalance         Int               @default(100)
+  coinBalance         Int               @default(0)
   bestScore           Int               @default(0)
   isActive            Boolean           @default(true)
   isBlocked           Boolean           @default(false)
+  isInfluencer        Boolean           @default(false)
   excludedFromRanking Boolean           @default(false)
+  receivedSignupBonus Boolean           @default(false)
+  referredByAffiliateId String?
+  referredByAffiliate Affiliate?        @relation("AffiliateReferrals", fields: [referredByAffiliateId], references: [id], onDelete: SetNull)
+  ownedAffiliate      Affiliate?        @relation("AffiliateOwner")
   lastLoginAt         DateTime?
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
@@ -28,15 +36,50 @@ model User {
   notes               UserNote[]
 
   @@index([createdAt])
+  @@index([referredByAffiliateId])
+}
+
+model Affiliate {
+  id               String                @id @default(cuid())
+  userId           String                @unique
+  user             User                  @relation("AffiliateOwner", fields: [userId], references: [id], onDelete: Cascade)
+  code             String                @unique
+  status           String                @default("ACTIVE")
+  cpaAmount        Int                   @default(2000)
+  cpaRtpMode       String                @default("GLOBAL")
+  cpaRetentionEnabled Boolean            @default(true)
+  cpaCycleSize     Int                   @default(10)
+  cpaRetainedPositions String            @default("[9,10]")
+  cpaEventCount    Int                   @default(0)
+  availableBalance Int                   @default(0)
+  withdrawnBalance Int                   @default(0)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  referrals        User[]                @relation("AffiliateReferrals")
+  commissions      AffiliateCommission[]
+
+  @@index([status, createdAt])
+}
+
+model AffiliateCommission {
+  id          String    @id @default(cuid())
+  affiliateId String
+  affiliate   Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  userId      String
+  depositId   String    @unique
+  amount      Int
+  position    Int       @default(1)
+  status      String    @default("AVAILABLE")
+  createdAt   DateTime  @default(now())
+
+  @@index([affiliateId, createdAt])
 }
 
 model Game {
   id              String             @id @default(cuid())
   userId          String
   user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  gameType        String             @default("BURACO_DOIDO")
-  configVersionId String?
-  configVersion   GameConfigVersion? @relation(fields: [configVersionId], references: [id])
+  gameType        String             @default("SPACE_ADVENTURE")
   status          String             @default("ACTIVE")
   startedAt       DateTime           @default(now())
   finishedAt      DateTime?
@@ -58,11 +101,9 @@ model Game {
   events          GameEvent[]
   transactions    CoinTransaction[]
   alerts          FraudAlert[]
-  reviews         GameReview[]
 
   @@index([userId, finishedAt])
   @@index([status, finishedAt])
-  @@index([configVersionId])
   @@index([gameType, finishedAt])
 }
 
@@ -101,7 +142,6 @@ model Admin {
   transactions   CoinTransaction[]
   reviewedAlerts FraudAlert[]      @relation("FraudReviewer")
   notes          UserNote[]
-  reviews        GameReview[]
   rtpSettings    RtpSetting[]
 }
 
@@ -156,6 +196,7 @@ model Withdrawal {
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   amount      Int
+  feeAmount   Int      @default(0)
   status      String   @default("COMPLETED")
   provider    String   @default("DEMO")
   reference   String   @unique
@@ -168,6 +209,61 @@ model Withdrawal {
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
+}
+
+model PlatformSetting {
+  id                    String   @id @default("MAIN")
+  minimumBet            Int      @default(500)
+  maximumBet            Int      @default(25000)
+  suggestedBets         String   @default("[5,10,20,50,100,200,250]")
+  minimumDeposit        Int      @default(1000)
+  maximumDeposit        Int      @default(1000000)
+  minimumWithdrawal     Int      @default(1000)
+  maximumWithdrawal     Int      @default(1000000)
+  withdrawalFeePercentage Float  @default(0)
+  signupBonusEnabled    Boolean  @default(false)
+  signupBonusAmount     Int      @default(0)
+  registrationsEnabled  Boolean  @default(true)
+  depositsEnabled       Boolean  @default(true)
+  withdrawalsEnabled    Boolean  @default(true)
+  maintenanceMode       Boolean  @default(false)
+  affiliateDefaultCpaAmount Int  @default(2000)
+  affiliateCpaRetentionEnabled Boolean @default(false)
+  affiliateCpaCycleSize Int     @default(10)
+  affiliateCpaRetainedPositions String @default("[9,10]")
+  updatedAt             DateTime @updatedAt
+}
+
+model SpaceDifficultySetting {
+  id             String   @id @default("MAIN")
+  preset         String   @default("medium")
+  minFallMs      Int      @default(950)
+  maxFallMs      Int      @default(1650)
+  spawnGapMs     Int      @default(620)
+  rampWindowMs   Int      @default(60000)
+  rockFrequency  Int      @default(42)
+  coinFrequency  Int      @default(46)
+  boostFrequency Int      @default(12)
+  boostDurationMs Int     @default(3000)
+  maximumScore   Int      @default(10000)
+  hitRadius      Float    @default(0.11)
+  hitRadiusY     Float    @default(0.08)
+  freeRtpPercentage Float @default(80)
+  shipSpeed      Float    @default(1.35)
+  multiplierPerFloor Float @default(0.03)
+  boostRockFrequency Int  @default(42)
+  updatedAt      DateTime @updatedAt
+}
+
+model AdminNotification {
+  id        String   @id @default(cuid())
+  type      String
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([read, createdAt])
 }
 
 model AdminSession {
@@ -199,70 +295,6 @@ model AdminAuditLog {
   createdAt    DateTime @default(now())
 
   @@index([createdAt])
-}
-
-model GameConfig {
-  id              String              @id @default(cuid())
-  name            String
-  activeVersionId String?
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  versions        GameConfigVersion[] @relation("ConfigVersions")
-}
-
-model GameConfigVersion {
-  id               String            @id @default(cuid())
-  gameConfigId     String
-  gameConfig       GameConfig        @relation("ConfigVersions", fields: [gameConfigId], references: [id], onDelete: Cascade)
-  version          Int
-  gameDuration     Int               @default(30)
-  holeCount        Int               @default(9)
-  minSpawnInterval Int               @default(90)
-  maxSpawnInterval Int               @default(200)
-  minVisibleTime   Int               @default(400)
-  maxVisibleTime   Int               @default(1200)
-  maximumScore     Int               @default(10000)
-  gameCost         Int               @default(0)
-  minimumStake     Int               @default(10)
-  maximumStake     Int               @default(500)
-  comboX2          Int               @default(5)
-  comboX3          Int               @default(10)
-  resetComboOnMiss Boolean           @default(true)
-  isActive         Boolean           @default(false)
-  createdAt        DateTime          @default(now())
-  characters       CharacterConfig[]
-  rewards          RewardRange[]
-  games            Game[]
-
-  @@unique([gameConfigId, version])
-}
-
-model CharacterConfig {
-  id                  String            @id @default(cuid())
-  gameConfigVersionId String
-  version             GameConfigVersion @relation(fields: [gameConfigVersionId], references: [id], onDelete: Cascade)
-  name                String
-  code                String
-  type                String
-  visual              String
-  frequency           Int
-  points              Int
-  timeBonus           Int               @default(0)
-  isActive            Boolean           @default(true)
-
-  @@unique([gameConfigVersionId, code])
-}
-
-model RewardRange {
-  id                  String            @id @default(cuid())
-  gameConfigVersionId String
-  version             GameConfigVersion @relation(fields: [gameConfigVersionId], references: [id], onDelete: Cascade)
-  minimumScore        Int
-  maximumScore        Int
-  coins               Int
-  createdAt           DateTime          @default(now())
-
-  @@index([gameConfigVersionId, minimumScore, maximumScore])
 }
 
 model CoinTransaction {
@@ -310,16 +342,5 @@ model UserNote {
   adminId   String
   admin     Admin    @relation(fields: [adminId], references: [id])
   content   String
-  createdAt DateTime @default(now())
-}
-
-model GameReview {
-  id        String   @id @default(cuid())
-  gameId    String
-  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  adminId   String
-  admin     Admin    @relation(fields: [adminId], references: [id])
-  status    String
-  note      String?
   createdAt DateTime @default(now())
 }

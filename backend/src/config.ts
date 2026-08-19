@@ -4,7 +4,6 @@ export const config = {
   port: Number(process.env.PORT || 3001),
   isProduction: process.env.NODE_ENV === 'production',
   corsOrigins: [
-    process.env.PLAYER_FRONTEND_URL || 'http://localhost:5173',
     process.env.ADMIN_FRONTEND_URL || 'http://localhost:5174',
     process.env.SPACE_FRONTEND_URL || 'http://localhost:5175',
   ],

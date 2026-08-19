@@ -1,4 +1,4 @@
-type IconName = 'chevron-left' | 'chevron-right' | 'close' | 'timer' | 'volume' | 'volume-off' | 'flame' | 'cashout' | 'mail' | 'lock' | 'user'
+export type IconName = 'chevron-left' | 'chevron-right' | 'chevron-down' | 'close' | 'timer' | 'volume' | 'volume-off' | 'flame' | 'cashout' | 'mail' | 'lock' | 'user' | 'phone' | 'home' | 'users' | 'settings' | 'logout' | 'share' | 'copy' | 'wallet' | 'card-id' | 'eye' | 'eye-off' | 'gift' | 'check'
 
 export function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
   const common = {
@@ -87,6 +87,118 @@ export function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
         <svg {...common}>
           <circle cx="12" cy="8" r="3.6" />
           <path d="M4.5 20c1-4 4.2-6.2 7.5-6.2S18.5 16 19.5 20" />
+        </svg>
+      )
+
+    case 'phone':
+      return (
+        <svg {...common}>
+          <path d="M6.5 3.5h4l1.5 4.5-2.5 1.8a11 11 0 0 0 5.2 5.2l1.8-2.5 4.5 1.5v4a1.5 1.5 0 0 1-1.6 1.5C11.9 19 5 12.1 4.5 4.6A1.5 1.5 0 0 1 6.5 3.5Z" strokeLinejoin="round" />
+        </svg>
+      )
+
+    case 'chevron-down':
+      return <svg {...common}><polyline points="5 9 12 16 19 9" /></svg>
+
+    case 'home':
+      return (
+        <svg {...common}>
+          <path d="M4 11.5 12 4l8 7.5" />
+          <path d="M6 10v9.5a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V10" />
+          <path d="M10 20.5v-6h4v6" />
+        </svg>
+      )
+
+    case 'users':
+      return (
+        <svg {...common}>
+          <circle cx="9" cy="8" r="3.4" />
+          <path d="M3 20c.8-3.6 3.1-5.6 6-5.6s5.2 2 6 5.6" />
+          <path d="M16 4.3a3.4 3.4 0 0 1 0 6.8" />
+          <path d="M18.5 14.6a5.6 5.6 0 0 1 2.5 4.9" />
+        </svg>
+      )
+
+    case 'settings':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19 14.5a1.7 1.7 0 0 0 .3 1.9l.1.1-2 2-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V20h-2.8v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-2-2 .1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 5.4 13.5H5.3v-2.8h.1A1.7 1.7 0 0 0 7 9.5a1.7 1.7 0 0 0-.3-1.9l-.1-.1 2-2 .1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 11.6 4.3V4.2h2.8v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 2 2-.1.1a1.7 1.7 0 0 0-.3 1.9c.25.6.85 1 1.5 1H20v2.8h-.1a1.7 1.7 0 0 0-1.5 1Z" />
+        </svg>
+      )
+
+    case 'logout':
+      return (
+        <svg {...common}>
+          <path d="M9.5 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.5" />
+          <path d="M15.5 16.5 20 12l-4.5-4.5" />
+          <path d="M20 12H9.5" />
+        </svg>
+      )
+
+    case 'share':
+      return (
+        <svg {...common}>
+          <circle cx="18" cy="5.5" r="2.3" />
+          <circle cx="6" cy="12" r="2.3" />
+          <circle cx="18" cy="18.5" r="2.3" />
+          <path d="m8 10.7 8-3.6M8 13.3l8 3.6" />
+        </svg>
+      )
+
+    case 'copy':
+      return (
+        <svg {...common}>
+          <rect x="8.5" y="8.5" width="12" height="12" rx="2.2" />
+          <path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5" />
+        </svg>
+      )
+
+    case 'wallet':
+      return (
+        <svg {...common}>
+          <rect x="3" y="6" width="18" height="13" rx="2.3" />
+          <path d="M3 10h18" />
+          <circle cx="16.5" cy="14" r="1" fill="currentColor" stroke="none" />
+        </svg>
+      )
+
+    case 'card-id':
+      return (
+        <svg {...common}>
+          <rect x="2.5" y="5" width="19" height="14" rx="2.3" />
+          <circle cx="8.3" cy="12" r="2.1" />
+          <path d="M5 16.3c.5-1.5 1.7-2.3 3.3-2.3s2.8.8 3.3 2.3" />
+          <path d="M14.5 10h4M14.5 14h4" />
+        </svg>
+      )
+
+    case 'eye':
+      return (
+        <svg {...common}>
+          <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      )
+
+    case 'eye-off':
+      return (
+        <svg {...common}>
+          <path d="M4 4l16 16" />
+          <path d="M10.6 5.6A10.7 10.7 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a15.6 15.6 0 0 1-3.4 4.2M6.8 7.3C4 9 2.5 12 2.5 12S6 18.5 12 18.5a9.7 9.7 0 0 0 3.3-.6" />
+          <path d="M9.9 10a3 3 0 0 0 4.1 4.1" />
+        </svg>
+      )
+
+    case 'check':
+      return <svg {...common}><polyline points="4.5 12.5 9.5 17.5 19.5 6.5" /></svg>
+
+    case 'gift':
+      return (
+        <svg {...common}>
+          <rect x="3" y="8.5" width="18" height="4" rx="1" />
+          <path d="M12 8.5V21M4 12.5V19a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-6.5" />
+          <path d="M12 8.5c-1.5 0-3-1-3.5-2.5C8 4.5 9 3.5 10.2 3.5c1.4 0 1.8 1.4 1.8 2.5v2.5Zm0 0c1.5 0 3-1 3.5-2.5.5-1.5-.5-2.5-1.7-2.5-1.4 0-1.8 1.4-1.8 2.5v2.5Z" />
         </svg>
       )
   }

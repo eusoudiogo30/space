@@ -1,5 +1,19 @@
 import { randomUUID } from 'node:crypto'
-import { progressiveRoundMultiplier, DEFAULT_MULTIPLIER_PER_FLOOR } from './gameEngine.js'
+
+export const MAX_PROGRESSIVE_MULTIPLIER = 5
+export const DEFAULT_MULTIPLIER_PER_FLOOR = 0.03
+
+export function progressiveRoundMultiplier(floor: number, multiplierPerFloor: number) {
+  // floor is the number of coins collected so far (0, 1, 2, ...). Every coin has to move the
+  // multiplier — clamping this up to a minimum of 1 before subtracting 1 for the exponent used
+  // to silently cancel the very first coin's effect (floor 0 and floor 1 both produced the same
+  // 1x result), which is what made the first "Moeda coletada!" of a round look like it did
+  // nothing to the payout.
+  const truncated = Math.trunc(floor)
+  const clearedFloors = Math.max(0, Math.min(10_000, Number.isFinite(truncated) ? truncated : 0))
+  const step = Math.max(0.01, Math.min(1, Number(multiplierPerFloor) || DEFAULT_MULTIPLIER_PER_FLOOR))
+  return Math.min(MAX_PROGRESSIVE_MULTIPLIER, (1 + step) ** clearedFloors)
+}
 
 export type SpaceObjectType = 'rock' | 'coin' | 'boost'
 export type SpaceOutcome = 'collected' | 'boosted' | 'crashed' | 'dodged' | 'missed'
@@ -28,6 +42,15 @@ export type SpaceEngineConfig = {
   maximumScore: number
   hitRadius: number
   hitRadiusY: number
+  // How long (ms of played time) it takes the fall speed to ramp from maxFallMs down to
+  // minFallMs. Kept separate from gameDuration because real-money rounds use a large internal
+  // gameDuration cap (no visible timer) — ramping against that would barely move during an
+  // actual play session, which is why "harder" presets used to feel identical to easier ones.
+  rampWindowMs: number
+  // Rock frequency used only for the brief window right after a boost spawns — lets admins make
+  // the "grab the boost" moment feel riskier (more rocks nearby) or safer, independent of the
+  // baseline rockFrequency used everywhere else.
+  boostRockFrequency: number
 }
 
 export type PositionSample = { t: number; x: number; y: number }
@@ -72,6 +95,23 @@ export const defaults: SpaceEngineConfig = {
   maximumScore: 10000,
   hitRadius: 0.11,
   hitRadiusY: 0.08,
+  rampWindowMs: 60000,
+  boostRockFrequency: 42,
+}
+
+// The difficulty preset sets the base rock/coin/boost mix (this is what actually makes "Difícil"
+// feel harder — more rocks, fewer pickups). RTP and the influencer flag only apply a modest nudge
+// on top of that base, so a high RTP never makes "Difícil" easier than "Fácil", and an influencer
+// account still plays noticeably easier than a normal one at the same preset.
+export function deriveObjectFrequencies(base: { rockFrequency: number; coinFrequency: number; boostFrequency: number }, rtpPercentage: number, influencer: boolean) {
+  const rtp = Math.max(0, Math.min(100, rtpPercentage))
+  const nudge = influencer ? 18 : Math.round((rtp - 80) * 0.15)
+  const rockFrequency = Math.max(5, base.rockFrequency - nudge)
+  const freedUp = base.rockFrequency - rockFrequency
+  const pickupTotal = base.coinFrequency + base.boostFrequency
+  const coinFrequency = pickupTotal > 0 ? base.coinFrequency + Math.round(freedUp * (base.coinFrequency / pickupTotal)) : base.coinFrequency
+  const boostFrequency = Math.max(0, 100 - rockFrequency - coinFrequency)
+  return { rockFrequency, coinFrequency, boostFrequency }
 }
 
 const EDGE_MARGIN = 0.1
@@ -79,12 +119,17 @@ const MIN_SEPARATION = 0.38
 const FALL_START_Y = -0.1
 const FALL_END_Y = 0.86
 const PATH_CHECK_STEP_MS = 50
+// How long after a boost spawns nearby spawns still roll with boostRockFrequency instead of the
+// baseline — this is what makes rocks "come together with" a boost rather than just coincide by
+// chance at the base rate.
+const BOOST_ROCK_WINDOW_MS = 1500
 
-function rollType(config: SpaceEngineConfig, inTraining: boolean): SpaceObjectType {
+function rollType(config: SpaceEngineConfig, inTraining: boolean, nearBoost: boolean): SpaceObjectType {
   if (inTraining) return Math.random() < config.boostFrequency / (config.coinFrequency + config.boostFrequency) ? 'boost' : 'coin'
-  const roll = Math.random() * (config.rockFrequency + config.coinFrequency + config.boostFrequency)
-  if (roll < config.rockFrequency) return 'rock'
-  if (roll < config.rockFrequency + config.coinFrequency) return 'coin'
+  const rockFrequency = nearBoost ? config.boostRockFrequency : config.rockFrequency
+  const roll = Math.random() * (rockFrequency + config.coinFrequency + config.boostFrequency)
+  if (roll < rockFrequency) return 'rock'
+  if (roll < rockFrequency + config.coinFrequency) return 'coin'
   return 'boost'
 }
 
@@ -96,21 +141,30 @@ function generateSchedule(config: SpaceEngineConfig): SpaceObject[] {
   const objects: SpaceObject[] = []
   const totalMs = config.gameDuration * 1000
   let t = Math.round(config.spawnGapMs * 0.5)
+  let lastBoostSpawnAt = -Infinity
 
   while (t < totalMs - 300) {
-    const progress = Math.min(1, t / totalMs)
+    const progress = Math.min(1, t / Math.max(1000, config.rampWindowMs))
     const fallDuration = Math.round(config.maxFallMs - progress * (config.maxFallMs - config.minFallMs))
     const hitAt = t + fallDuration
     const active = objects.filter((o) => o.spawnAt <= t && o.hitAt >= t)
 
-    let x = randomX()
-    let attempts = 0
-    while (active.some((o) => Math.abs(o.x - x) < MIN_SEPARATION) && attempts < 10) {
-      x = randomX()
-      attempts++
+    // If every candidate X collides with something already falling, skip this spawn slot
+    // entirely rather than force an overlapping placement — two objects close enough in both
+    // X and time to both be within touch range of the ship is exactly what makes a coin
+    // collection and a rock crash land on top of each other.
+    let x: number | null = null
+    for (let attempts = 0; attempts < 20 && x === null; attempts++) {
+      const candidate = randomX()
+      if (!active.some((o) => Math.abs(o.x - candidate) < MIN_SEPARATION)) x = candidate
     }
 
-    objects.push({ id: randomUUID(), x, type: rollType(config, t < config.trainingMs), spawnAt: t, hitAt, resolved: false })
+    if (x !== null) {
+      const nearBoost = t - lastBoostSpawnAt <= BOOST_ROCK_WINDOW_MS
+      const type = rollType(config, t < config.trainingMs, nearBoost)
+      objects.push({ id: randomUUID(), x, type, spawnAt: t, hitAt, resolved: false })
+      if (type === 'boost') lastBoostSpawnAt = t
+    }
     t += Math.round(config.spawnGapMs + (Math.random() * 200 - 100))
   }
 

@@ -1,12 +1,26 @@
-import type { ActiveRound, GameConfig, User } from '../types'
+import type { ActiveRound, GameConfig, MyAffiliate, MySummary, User } from '../types'
 
 const API_URL = import.meta.env.VITE_API_URL || '/api'
 const TOKEN_KEY = 'space-adventure-token'
+const REF_KEY = 'space-adventure-ref'
+
+const urlRef = new URLSearchParams(window.location.search).get('ref')
+if (urlRef) localStorage.setItem(REF_KEY, urlRef.toLowerCase())
+
+function readToken() {
+  return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY)
+}
+// "Lembrar de mim" decides which storage the token lands in — localStorage survives closing the
+// browser, sessionStorage clears itself when the tab/window closes.
+function storeToken(token: string, rememberMe: boolean) {
+  if (rememberMe) localStorage.setItem(TOKEN_KEY, token)
+  else sessionStorage.setItem(TOKEN_KEY, token)
+}
 
 type RequestOptions = RequestInit & { auth?: boolean }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const token = localStorage.getItem(TOKEN_KEY)
+  const token = readToken()
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
@@ -21,17 +35,22 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 export const api = {
-  hasToken: () => Boolean(localStorage.getItem(TOKEN_KEY)),
-  logout: () => localStorage.removeItem(TOKEN_KEY),
-  register: (payload: { name: string; email: string; password: string }) =>
+  hasToken: () => Boolean(readToken()),
+  logout: () => { localStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(TOKEN_KEY) },
+  register: (payload: { username: string; phone: string; name: string; password: string }) =>
     request<{ token: string; user: User }>('/auth/register', {
-      method: 'POST', body: JSON.stringify(payload),
-    }).then((data) => (localStorage.setItem(TOKEN_KEY, data.token), data)),
-  login: (payload: { email: string; password: string }) =>
+      method: 'POST', body: JSON.stringify({ ...payload, ref: localStorage.getItem(REF_KEY) || undefined }),
+    }).then((data) => (storeToken(data.token, true), data)),
+  login: (payload: { username: string; password: string }, rememberMe: boolean) =>
     request<{ token: string; user: User }>('/auth/login', {
-      method: 'POST', body: JSON.stringify(payload),
-    }).then((data) => (localStorage.setItem(TOKEN_KEY, data.token), data)),
+      method: 'POST', body: JSON.stringify({ username: payload.username, password: payload.password }),
+    }).then((data) => (storeToken(data.token, rememberMe), data)),
   me: () => request<{ user: User }>('/users/me', { auth: true }),
+  updateMe: (payload: { name?: string; phone?: string; document?: string; currentPassword?: string; newPassword?: string }) =>
+    request<{ user: User }>('/users/me', { method: 'PATCH', auth: true, body: JSON.stringify(payload) }),
+  mySummary: () => request<MySummary>('/users/me/summary', { auth: true }),
+  myAffiliate: () => request<{ affiliate: MyAffiliate }>('/users/me/affiliate', { auth: true }),
+  redeemAffiliateCommission: () => request<{ balance: number; redeemed: number }>('/users/me/affiliate/redeem', { method: 'POST', auth: true }),
 
   getConfig: () => request<GameConfig>('/space/config'),
 
@@ -65,4 +84,18 @@ export const api = {
 
   demoCredits: (operation: 'ADD' | 'REMOVE', amount: number) =>
     request<{ balance: number; disclaimer: string }>('/users/demo-credits', { method: 'POST', auth: true, body: JSON.stringify({ operation, amount }) }),
+
+  createDeposit: (amountReais: number) =>
+    request<{ deposit: { id: string; amount: number; status: string; qrImage: string | null; copyPaste: string | null; expiresInSeconds: number } }>(
+      '/payments/deposits',
+      { method: 'POST', auth: true, body: JSON.stringify({ amount: amountReais }) },
+    ),
+
+  getDeposit: (id: string) =>
+    request<{ deposit: { id: string; amount: number; status: string; confirmedAt: string | null } }>(
+      `/payments/deposits/${id}`,
+      { auth: true },
+    ),
+
+  recentDepositActivity: () => request<{ recentDepositors: number }>('/payments/recent-activity'),
 }

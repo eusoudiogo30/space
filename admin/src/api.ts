@@ -11,4 +11,5 @@ export async function login(email: string, password: string) {
   const data = await api<{accessToken:string;refreshToken:string;admin:Admin}>('/auth/login',{method:'POST',body:JSON.stringify({email,password})})
   localStorage.setItem(ACCESS,data.accessToken); localStorage.setItem(REFRESH,data.refreshToken); return data.admin
 }
+export const money = (cents: number) => (Number(cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 export type Admin={id:string;name:string;email:string;role:string}

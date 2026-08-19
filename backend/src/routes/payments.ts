@@ -5,6 +5,9 @@ import { z } from 'zod'
 import { prisma } from '../db.js'
 import { authenticate } from '../middleware/auth.js'
 import { getZypherProvider, zypherWebhookToken } from '../services/paymentGateway.js'
+import { notifyAdmins } from '../services/notifications.js'
+import { getPlatformSettings } from '../services/platformSettings.js'
+import { cpaPositionInCycle, resolveCpaRule } from '../services/affiliateCpa.js'
 import { asyncHandler, HttpError } from '../utils/http.js'
 
 export const paymentsRouter = Router()
@@ -27,6 +30,24 @@ paymentsRouter.post('/webhooks/zypher', asyncHandler(async (req, res) => {
         const user = await tx.user.findUniqueOrThrow({ where: { id: deposit.userId } })
         await tx.user.update({ where: { id: user.id }, data: { coinBalance: { increment: deposit.amount } } })
         await tx.coinTransaction.create({ data: { userId: user.id, type: 'DEPOSIT', amount: deposit.amount, balanceBefore: user.coinBalance, balanceAfter: user.coinBalance + deposit.amount, reason: `Depósito PIX ${deposit.reference}` } })
+
+        // CPA: the affiliate is credited once, on the referred user's very first confirmed
+        // deposit — unless that event lands on a retained position in the affiliate's cycle
+        // (global rule, or a per-affiliate override), in which case it's logged but not paid.
+        if (user.referredByAffiliateId) {
+          const priorConfirmedDeposits = await tx.deposit.count({ where: { userId: user.id, status: 'CONFIRMED', id: { not: deposit.id } } })
+          if (priorConfirmedDeposits === 0) {
+            const affiliate = await tx.affiliate.findUnique({ where: { id: user.referredByAffiliateId } })
+            if (affiliate && affiliate.status === 'ACTIVE') {
+              const settings = await getPlatformSettings()
+              const rule = resolveCpaRule(affiliate, settings)
+              const position = cpaPositionInCycle(affiliate.cpaEventCount, rule.cycleSize)
+              const retained = rule.enabled && rule.retainedPositions.includes(position)
+              await tx.affiliateCommission.create({ data: { affiliateId: affiliate.id, userId: user.id, depositId: deposit.id, amount: affiliate.cpaAmount, position, status: retained ? 'RETAINED' : 'AVAILABLE' } })
+              await tx.affiliate.update({ where: { id: affiliate.id }, data: { cpaEventCount: { increment: 1 }, ...(retained ? {} : { availableBalance: { increment: affiliate.cpaAmount } }) } })
+            }
+          }
+        }
       })
     } else if (deposit && ['expired', 'failed'].includes(event.status)) {
       await prisma.deposit.updateMany({ where: { id: deposit.id, status: 'PENDING' }, data: { status: event.status.toUpperCase() } })
@@ -35,6 +56,7 @@ paymentsRouter.post('/webhooks/zypher', asyncHandler(async (req, res) => {
         prisma.deposit.update({ where: { id: deposit.id }, data: { status: 'DISPUTED' } }),
         prisma.fraudAlert.create({ data: { userId: deposit.userId, type: 'PIX_MED', description: `Contestação MED recebida para o depósito ${deposit.reference}.`, evidence: JSON.stringify(req.body), riskLevel: 'CRITICAL' } }),
       ])
+      await notifyAdmins('FRAUD_ALERT', 'Contestação PIX (MED) recebida', `Depósito ${deposit.reference} foi contestado pelo mecanismo de defesa do PIX.`)
     }
   } else if (event.type === 'cashout' && (event.transaction_id || event.e2e)) {
     const withdrawal = await prisma.withdrawal.findFirst({ where: { OR: [
@@ -56,16 +78,30 @@ paymentsRouter.post('/webhooks/zypher', asyncHandler(async (req, res) => {
   res.json({ ok: true })
 }))
 
+// GET /api/payments/recent-activity - Public, platform-wide (never per-user) count of confirmed
+// deposits in the last 30 minutes, for the deposit screen's "N people just deposited" line —
+// real data, not a fabricated number.
+paymentsRouter.get('/recent-activity', asyncHandler(async (_req, res) => {
+  const since = new Date(Date.now() - 30 * 60_000)
+  const count = await prisma.deposit.count({ where: { status: 'CONFIRMED', confirmedAt: { gte: since } } })
+  res.json({ recentDepositors: count })
+}))
+
 paymentsRouter.use(authenticate)
 paymentsRouter.use(rateLimit({ windowMs: 60_000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false }))
 
 paymentsRouter.post('/deposits', asyncHandler(async (req, res) => {
-  const input = z.object({ amount: z.number().min(10).max(100000), document: z.string().regex(/^\d{11}$|^\d{14}$/).optional() }).parse(req.body)
+  const settings = await getPlatformSettings()
+  if (!settings.depositsEnabled || settings.maintenanceMode) throw new HttpError(403, 'Depósitos estão temporariamente indisponíveis.')
+  const input = z.object({ amount: z.number().min(0.01).max(1000000), document: z.string().regex(/^\d{11}$|^\d{14}$/).optional() }).parse(req.body)
   const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId! } })
+  const amountCents = Math.round(input.amount * 100)
+  if (amountCents < settings.minimumDeposit || amountCents > settings.maximumDeposit) {
+    throw new HttpError(422, `O depósito deve ficar entre R$ ${(settings.minimumDeposit / 100).toFixed(2)} e R$ ${(settings.maximumDeposit / 100).toFixed(2)}`)
+  }
   const origin = `${req.protocol}://${req.get('host')}`
   const provider = await getZypherProvider(origin)
   if (!provider) throw new HttpError(503, 'Gateway de pagamento não está habilitado.')
-  const amountCents = Math.round(input.amount * 100)
   const reference = `deposit-${randomUUID()}`
   const deposit = await prisma.deposit.create({ data: { userId: user.id, amount: amountCents, status: 'PENDING', provider: 'ZYPHER', reference } })
   try {
@@ -85,27 +121,36 @@ paymentsRouter.get('/deposits/:id', asyncHandler(async (req, res) => {
 }))
 
 paymentsRouter.post('/withdrawals', asyncHandler(async (req, res) => {
+  const settings = await getPlatformSettings()
+  if (!settings.withdrawalsEnabled || settings.maintenanceMode) throw new HttpError(403, 'Saques estão temporariamente indisponíveis.')
   const input = z.object({
-    amount: z.number().min(10).max(100000), document: z.string().transform((value) => value.replace(/\D/g, '')).pipe(z.string().regex(/^\d{11}$|^\d{14}$/)),
+    amount: z.number().min(0.01).max(1000000), document: z.string().transform((value) => value.replace(/\D/g, '')).pipe(z.string().regex(/^\d{11}$|^\d{14}$/)),
     pixKey: z.string().trim().min(3).max(200), pixType: z.enum(['EMAIL', 'CPF', 'CNPJ', 'PHONE', 'EVP']),
   }).parse(req.body)
   const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId! } })
   const amountCents = Math.round(input.amount * 100)
+  if (amountCents < settings.minimumWithdrawal || amountCents > settings.maximumWithdrawal) {
+    throw new HttpError(422, `O saque deve ficar entre R$ ${(settings.minimumWithdrawal / 100).toFixed(2)} e R$ ${(settings.maximumWithdrawal / 100).toFixed(2)}`)
+  }
   if (user.coinBalance < amountCents) throw new HttpError(422, 'Saldo insuficiente para este saque.')
+  const feeAmount = Math.round(amountCents * (settings.withdrawalFeePercentage / 100))
+  const netAmount = amountCents - feeAmount
+  if (netAmount <= 0) throw new HttpError(422, 'O valor do saque é menor que a taxa aplicada.')
   const origin = `${req.protocol}://${req.get('host')}`
   const provider = await getZypherProvider(origin)
   if (!provider) throw new HttpError(503, 'Gateway de pagamento não está habilitado.')
   const reference = `withdrawal-${randomUUID()}`
   const withdrawal = await prisma.$transaction(async (tx) => {
-    const created = await tx.withdrawal.create({ data: { userId: user.id, amount: amountCents, status: 'PENDING', provider: 'ZYPHER', reference, destinationType: input.pixType, destinationLast4: input.pixKey.slice(-4) } })
+    const created = await tx.withdrawal.create({ data: { userId: user.id, amount: amountCents, feeAmount, status: 'PENDING', provider: 'ZYPHER', reference, destinationType: input.pixType, destinationLast4: input.pixKey.slice(-4) } })
     await tx.user.update({ where: { id: user.id }, data: { coinBalance: { decrement: amountCents } } })
     await tx.coinTransaction.create({ data: { userId: user.id, type: 'WITHDRAWAL_PENDING', amount: -amountCents, balanceBefore: user.coinBalance, balanceAfter: user.coinBalance - amountCents, reason: `Solicitação de saque ${reference}` } })
     return created
   })
   try {
-    const result = await provider.requestWithdrawal({ reference, amount: amountCents, name: user.name, document: input.document, pixKey: input.pixKey, pixType: input.pixType })
+    const result = await provider.requestWithdrawal({ reference, amount: netAmount, name: user.name, document: input.document, pixKey: input.pixKey, pixType: input.pixType })
     const updated = await prisma.withdrawal.update({ where: { id: withdrawal.id }, data: { status: result.status.toUpperCase(), providerTransactionId: result.transactionId, endToEndId: result.endToEndId } })
-    res.status(201).json({ withdrawal: { id: updated.id, amount: updated.amount, status: updated.status } })
+    if (updated.status === 'PENDING') await notifyAdmins('WITHDRAWAL_PENDING', 'Saque aguardando confirmação', `Saque ${reference} de ${user.name} ficou pendente no gateway e pode precisar de revisão manual.`)
+    res.status(201).json({ withdrawal: { id: updated.id, amount: updated.amount, feeAmount: updated.feeAmount, netAmount: updated.amount - updated.feeAmount, status: updated.status } })
   } catch (error) {
     await prisma.$transaction(async (tx) => {
       await tx.withdrawal.update({ where: { id: withdrawal.id }, data: { status: 'REFUNDED' } })

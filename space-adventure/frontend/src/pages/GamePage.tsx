@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createAudioEngine } from '../audio'
 import { Icon } from '../components/Icon'
 import { api } from '../services/api'
@@ -6,6 +6,28 @@ import type { ActiveRound, FlightStats, GameConfig, SkyObject, SkyObjectType } f
 
 type SkyOutcome = 'collected' | 'boosted' | 'crashed' | 'dodged' | 'missed'
 type RenderObject = SkyObject & { cssDelay: number; cssDuration: number }
+
+const SPEED_PARTICLE_COUNT = 16
+
+// Small streaks that continuously stream downward past the ship, independent of the actual
+// game objects — purely decorative, but they're what sell "flying forward" at a glance instead
+// of the ship just sitting in a static painted scene. Generated once (not on every re-render,
+// which would otherwise reset/jump them) with each particle looping on its own via CSS.
+function useSpeedParticles() {
+  return useMemo(
+    () =>
+      Array.from({ length: SPEED_PARTICLE_COUNT }, (_, i) => ({
+        id: i,
+        left: Math.round(Math.random() * 100),
+        width: 1 + Math.round(Math.random() * 2),
+        length: 14 + Math.round(Math.random() * 30),
+        duration: 850 + Math.round(Math.random() * 900),
+        delay: -Math.round(Math.random() * 2000),
+        opacity: (0.25 + Math.random() * 0.5).toFixed(2),
+      })),
+    [],
+  )
+}
 
 const ART: Record<SkyObjectType, string | string[]> = {
   coin: '/game/coin.svg',
@@ -28,35 +50,40 @@ function artFor(obj: SkyObject) {
 const FALL_START_Y = -0.1
 const FALL_END_Y = 0.86
 
-const FALLBACK = { gameDuration: 30, realGameDuration: 180, trainingMs: 5000, minFallMs: 950, maxFallMs: 1650, spawnGapMs: 620, hitRadius: 0.11, hitRadiusY: 0.08 }
+const FALLBACK = { gameDuration: 30, realGameDuration: 180, trainingMs: 5000, minFallMs: 950, maxFallMs: 1650, spawnGapMs: 620, hitRadius: 0.11, hitRadiusY: 0.08, rockFrequency: 42, coinFrequency: 46, boostFrequency: 12, boostRockFrequency: 42 }
 const EDGE_MARGIN = 0.1
 const MIN_SEPARATION = 0.38
-const TYPE_WEIGHTS: { type: SkyObjectType; weight: number }[] = [
-  { type: 'rock', weight: 42 },
-  { type: 'coin', weight: 46 },
-  { type: 'boost', weight: 12 },
-]
 
-function localSchedule(gameDuration: number, trainingMs: number, minFallMs: number, maxFallMs: number, spawnGapMs: number): SkyObject[] {
+// The rock/coin/boost mix is admin-configurable (see SpaceDifficultySetting.freeRtpPercentage,
+// applied server-side in GET /space/config) since it's the win rate players see in the free
+// funnel — it has to come from the server, not a hardcoded constant, for that to be tunable.
+// How long after a boost spawns nearby spawns still roll with the boost-specific rock weight —
+// mirrors the server's real-money schedule generator so free flights feel consistent with paid
+// ones (see BOOST_ROCK_WINDOW_MS in backend/src/services/spaceEngine.ts).
+const BOOST_ROCK_WINDOW_MS = 1500
+
+function localSchedule(gameDuration: number, trainingMs: number, minFallMs: number, maxFallMs: number, spawnGapMs: number, weights: { type: SkyObjectType; weight: number }[], boostRockWeight: number): SkyObject[] {
   const objects: SkyObject[] = []
   const totalMs = gameDuration * 1000
-  const totalWeight = TYPE_WEIGHTS.reduce((sum, w) => sum + w.weight, 0)
-  const trainingWeight = TYPE_WEIGHTS.filter((w) => w.type !== 'rock').reduce((sum, w) => sum + w.weight, 0)
-  const rollType = (inTraining: boolean): SkyObjectType => {
+  const rollType = (inTraining: boolean, nearBoost: boolean): SkyObjectType => {
+    const effective = weights.map((w) => w.type === 'rock' && nearBoost ? { type: w.type, weight: boostRockWeight } : w)
+    const totalWeight = effective.reduce((sum, w) => sum + w.weight, 0)
+    const trainingWeight = effective.filter((w) => w.type !== 'rock').reduce((sum, w) => sum + w.weight, 0)
     if (inTraining) {
       const roll = Math.random() * trainingWeight
       let acc = 0
-      for (const w of TYPE_WEIGHTS) { if (w.type === 'rock') continue; acc += w.weight; if (roll < acc) return w.type }
+      for (const w of effective) { if (w.type === 'rock') continue; acc += w.weight; if (roll < acc) return w.type }
       return 'coin'
     }
     const roll = Math.random() * totalWeight
     let acc = 0
-    for (const w of TYPE_WEIGHTS) { acc += w.weight; if (roll < acc) return w.type }
+    for (const w of effective) { acc += w.weight; if (roll < acc) return w.type }
     return 'coin'
   }
   const randomX = () => EDGE_MARGIN + Math.random() * (1 - EDGE_MARGIN * 2)
 
   let t = Math.round(spawnGapMs * 0.5)
+  let lastBoostSpawnAt = -Infinity
   while (t < totalMs - 300) {
     const progress = Math.min(1, t / totalMs)
     const fallDuration = Math.round(maxFallMs - progress * (maxFallMs - minFallMs))
@@ -65,13 +92,16 @@ function localSchedule(gameDuration: number, trainingMs: number, minFallMs: numb
     let x = randomX()
     let attempts = 0
     while (active.some((o) => Math.abs(o.x - x) < MIN_SEPARATION) && attempts < 10) { x = randomX(); attempts++ }
-    objects.push({ id: crypto.randomUUID(), x, type: rollType(t < trainingMs), spawnAt: t, hitAt })
+    const nearBoost = t - lastBoostSpawnAt <= BOOST_ROCK_WINDOW_MS
+    const type = rollType(t < trainingMs, nearBoost)
+    objects.push({ id: crypto.randomUUID(), x, type, spawnAt: t, hitAt })
+    if (type === 'boost') lastBoostSpawnAt = t
     t += Math.round(spawnGapMs + (Math.random() * 200 - 100))
   }
   return objects
 }
 
-const SHIP_SPEED = 1.35 // fraction of field width per second, keyboard-only
+const DEFAULT_SHIP_SPEED = 1.35 // fraction of field width per second, keyboard-only
 const SHIP_MIN_X = 0.07
 const SHIP_MAX_X = 0.93
 const SHIP_MIN_Y = 0.08
@@ -101,7 +131,9 @@ export function GamePage({ stakeAmount, activeRound, config, onFinish, onExit }:
   const trainingMs = config?.trainingMs ?? FALLBACK.trainingMs
   const hitRadius = config?.hitRadius ?? FALLBACK.hitRadius
   const hitRadiusY = config?.hitRadiusY ?? FALLBACK.hitRadiusY
+  const shipSpeed = config?.shipSpeed ?? DEFAULT_SHIP_SPEED
 
+  const speedParticles = useSpeedParticles()
   const [timeMs, setTimeMs] = useState(gameDurationMs)
   const [skyObjects, setSkyObjects] = useState<RenderObject[]>([])
   const [hitState, setHitState] = useState<Record<string, SkyOutcome>>({})
@@ -142,8 +174,11 @@ export function GamePage({ stakeAmount, activeRound, config, onFinish, onExit }:
   if (!audioRef.current) audioRef.current = createAudioEngine()
   const multiplierStep = config?.multiplierPerFloor ?? 0.03
 
+  // Mirrors the backend's progressiveRoundMultiplier exactly (spaceEngine.ts) — every coin has
+  // to move the multiplier, including the first one, or this display and the real payout drift
+  // apart the moment a round starts.
   function progressiveMultiplier(hits: number) {
-    return Math.min(5, (1 + multiplierStep) ** Math.max(0, hits - 1))
+    return Math.min(5, (1 + multiplierStep) ** Math.max(0, hits))
   }
   const currentMultiplier = progressiveMultiplier(stats.hits)
 
@@ -200,31 +235,12 @@ export function GamePage({ stakeAmount, activeRound, config, onFinish, onExit }:
     setFeedbackTone('')
   }
 
-  const resolveOnline = useCallback(async (gameId: string, obj: SkyObject) => {
-    try {
-      const response = await api.resolveObject(gameId, obj.id)
-      setHitState((old) => ({ ...old, [obj.id]: response.outcome as SkyOutcome }))
-      // combo only grows on collected coins and never resets except on crash, so it doubles as the hit count
-      setStats((old) => ({ hits: response.combo, misses: old.misses, combo: response.combo, maxCombo: Math.max(old.maxCombo, response.combo) }))
-      boostUntilRef.current = response.boostActiveUntil
-      setBoostActiveUntil(response.boostActiveUntil)
-      setTimeMs(response.remainingMs)
-      applyOutcome(response.outcome, response.crashed)
-      if (response.crashed) {
-        crashedRef.current = true
-        setCrashed(true)
-        window.setTimeout(() => void handleFinish(true), 700)
-      }
-    } catch {
-      // a single dropped resolve call is fine — /settle sweeps any unresolved objects at the end
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handleFinish])
-
-  const resolveOffline = useCallback((obj: SkyObject) => {
-    // This is the hitAt fallback (fires only if checkCollisionsNow never caught it earlier), so
-    // it has to apply the exact same true-touch rule (x AND y) — the ship has to have actually
-    // been where the object was, not just ever shared its column.
+  // Same true-touch rule (x AND y) for both game modes, computed synchronously from local state
+  // — no network round-trip. This is what free play always used, and what real-money rounds now
+  // use too for the player-facing outcome, so the two modes feel identical. The server call in
+  // resolveOnline below still runs in the background afterward, purely to verify the hit and
+  // settle the payout — it must never re-message an object the player already saw resolved.
+  const computeLocalOutcome = useCallback((obj: SkyObject): SkyOutcome => {
     const withinX = Math.abs(shipXRef.current - obj.x) <= hitRadius
     let collided = false
     if (withinX) {
@@ -234,12 +250,14 @@ export function GamePage({ stakeAmount, activeRound, config, onFinish, onExit }:
       collided = Math.abs(shipYRef.current - objY) <= hitRadiusY
     }
     const boosted = Date.now() < boostUntilRef.current
-    let outcome: SkyOutcome = 'dodged'
-    if (collided && obj.type === 'rock' && !boosted) outcome = 'crashed'
-    else if (collided && obj.type === 'coin') outcome = 'collected'
-    else if (collided && obj.type === 'boost') outcome = 'boosted'
-    else if (obj.type !== 'rock') outcome = 'missed'
+    if (collided && obj.type === 'rock' && !boosted) return 'crashed'
+    if (collided && obj.type === 'coin') return 'collected'
+    if (collided && obj.type === 'boost') return 'boosted'
+    if (obj.type !== 'rock') return 'missed'
+    return 'dodged'
+  }, [hitRadius, hitRadiusY])
 
+  const applyLocalOutcome = useCallback((obj: SkyObject, outcome: SkyOutcome) => {
     setHitState((old) => ({ ...old, [obj.id]: outcome }))
     applyOutcome(outcome, outcome === 'crashed')
 
@@ -260,13 +278,43 @@ export function GamePage({ stakeAmount, activeRound, config, onFinish, onExit }:
       setStats((old) => ({ ...old, misses: old.misses + 1 }))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handleFinish, hitRadius, hitRadiusY])
+  }, [handleFinish])
+
+  const resolveOnline = useCallback((gameId: string, obj: SkyObject, localOutcome: SkyOutcome) => {
+    // Sync with the server in the background purely to verify the hit (anti-cheat) and settle
+    // the authoritative score/combo for payout — the player already saw the real outcome above.
+    void (async () => {
+      try {
+        const response = await api.resolveObject(gameId, obj.id)
+        setStats((old) => ({ hits: response.combo, misses: old.misses, combo: response.combo, maxCombo: Math.max(old.maxCombo, response.combo) }))
+        boostUntilRef.current = response.boostActiveUntil
+        setBoostActiveUntil(response.boostActiveUntil)
+        setTimeMs(response.remainingMs)
+        // The server sweeps every object due since the last check in one pass, so this response
+        // can carry crashed:true even though *this* object (already shown above) wasn't the
+        // cause — some other rock was. Only surface a fresh crash message if the local check
+        // somehow missed one the server caught (rare anti-cheat correction); otherwise the round
+        // still ends below, silently, without overwriting the message already on screen.
+        if (response.outcome === 'crashed' && localOutcome !== 'crashed') {
+          setHitState((old) => ({ ...old, [obj.id]: 'crashed' }))
+          applyOutcome('crashed', true)
+        }
+        if (response.crashed) {
+          crashedRef.current = true
+          setCrashed(true)
+          window.setTimeout(() => void handleFinish(true), 700)
+        }
+      } catch {
+        // a single dropped resolve call is fine — /settle sweeps any unresolved objects at the end
+      }
+    })()
+  }, [handleFinish])
 
   // Fires the outcome for one object exactly once, whichever trigger got there first: the
   // continuous contact check (below) or the hitAt fallback timer for objects never touched.
-  // For online rounds, the ship's exact position is flushed to the server right before asking
-  // it to resolve — the server only trusts its own recorded trace, so a fresh sample here
-  // closes the gap between the throttled 130ms sync and the instant the client saw contact.
+  // Real-money and free-play rounds now resolve identically and instantly on the client. The
+  // only difference is that a real round also flushes the ship's position and asks the server to
+  // verify/settle in the background afterward, for anti-cheat and payout — never for the message.
   const settleObject = useCallback((obj: SkyObject) => {
     if (resolvedIdsRef.current.has(obj.id)) return
     resolvedIdsRef.current.add(obj.id)
@@ -275,8 +323,12 @@ export function GamePage({ stakeAmount, activeRound, config, onFinish, onExit }:
     // to because the effect always reused the object's *full* fall distance.
     const elapsedAtSettle = Date.now() - startRef.current
     hitProgressRef.current[obj.id] = Math.min(1, Math.max(0, (elapsedAtSettle - obj.spawnAt) / (obj.hitAt - obj.spawnAt)))
+
+    const localOutcome = computeLocalOutcome(obj)
+    applyLocalOutcome(obj, localOutcome)
+
     const gameId = gameIdRef.current
-    if (!gameId) { resolveOffline(obj); return }
+    if (!gameId) return
     void (async () => {
       try {
         await api.moveShip(gameId, shipXRef.current, shipYRef.current)
@@ -285,10 +337,9 @@ export function GamePage({ stakeAmount, activeRound, config, onFinish, onExit }:
       } catch {
         // if the flush fails the server still has whatever the last throttled sync sent
       }
-      await resolveOnline(gameId, obj)
+      resolveOnline(gameId, obj, localOutcome)
     })()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolveOnline, resolveOffline])
+  }, [computeLocalOutcome, applyLocalOutcome, resolveOnline])
 
   useEffect(() => {
     let schedule: SkyObject[]
@@ -305,6 +356,12 @@ export function GamePage({ stakeAmount, activeRound, config, onFinish, onExit }:
         config?.minFallMs ?? FALLBACK.minFallMs,
         config?.maxFallMs ?? FALLBACK.maxFallMs,
         config?.spawnGapMs ?? FALLBACK.spawnGapMs,
+        [
+          { type: 'rock', weight: config?.rockFrequency ?? FALLBACK.rockFrequency },
+          { type: 'coin', weight: config?.coinFrequency ?? FALLBACK.coinFrequency },
+          { type: 'boost', weight: config?.boostFrequency ?? FALLBACK.boostFrequency },
+        ],
+        config?.boostRockFrequency ?? FALLBACK.boostRockFrequency,
       )
       setTimeMs(gameDurationMs)
     }
@@ -402,7 +459,7 @@ export function GamePage({ stakeAmount, activeRound, config, onFinish, onExit }:
       last = now
       const dir = (rightPressedRef.current ? 1 : 0) - (leftPressedRef.current ? 1 : 0)
       if (dir !== 0 && !crashedRef.current && !landingRef.current && !draggingRef.current) {
-        const next = Math.min(SHIP_MAX_X, Math.max(SHIP_MIN_X, shipXRef.current + dir * SHIP_SPEED * dt))
+        const next = Math.min(SHIP_MAX_X, Math.max(SHIP_MIN_X, shipXRef.current + dir * shipSpeed * dt))
         applyShipPosition(next, shipYRef.current)
       }
       checkCollisionsNow()
@@ -410,7 +467,7 @@ export function GamePage({ stakeAmount, activeRound, config, onFinish, onExit }:
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [applyShipPosition, checkCollisionsNow])
+  }, [applyShipPosition, checkCollisionsNow, shipSpeed])
 
   // Slide-only 2D drag: touching down never snaps the ship to the finger — it only starts
   // tracking an anchor. The ship then moves by the *delta* the finger travels from that
@@ -518,6 +575,22 @@ export function GamePage({ stakeAmount, activeRound, config, onFinish, onExit }:
         )}
         <div className="arena-backdrop" aria-hidden="true" />
         <div className="arena-stars" aria-hidden="true" />
+        <div className="arena-particles" aria-hidden="true">
+          {speedParticles.map((p) => (
+            <span
+              key={p.id}
+              className="arena-particle"
+              style={{
+                left: `${p.left}%`,
+                width: `${p.width}px`,
+                height: `${p.length}px`,
+                opacity: p.opacity,
+                animationDuration: `${p.duration}ms`,
+                animationDelay: `${p.delay}ms`,
+              }}
+            />
+          ))}
+        </div>
         <div
           className="flight-field"
           ref={fieldElRef}

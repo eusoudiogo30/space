@@ -1,3 +1,6 @@
+import { useState } from 'react'
+import { Icon } from '../components/Icon'
+import { ProfileMenu } from '../components/ProfileMenu'
 import type { GameConfig, User } from '../types'
 
 type Props = {
@@ -9,15 +12,21 @@ type Props = {
   onSelectBet: (value: number) => void
   onPlay: (value: number) => void
   onFreePlay: () => void
-  onAccount: () => void
+  onLogin: () => void
+  onRegister: () => void
+  onOpenDeposit: () => void
+  onOpenProfile: () => void
+  onOpenReferral: () => void
+  onLogout: () => void
 }
 
 const DEFAULT_BETS = [5, 10, 20, 50, 100, 200, 250]
 
 export function HomePage({
   user, config, selectedBet, starting, message,
-  onSelectBet, onPlay, onFreePlay, onAccount,
+  onSelectBet, onPlay, onFreePlay, onLogin, onRegister, onOpenDeposit, onOpenProfile, onOpenReferral, onLogout,
 }: Props) {
+  const [menuOpen, setMenuOpen] = useState(false)
   const balance = user?.coins ?? 0
   const bets = (config?.suggestedBets ?? DEFAULT_BETS).map(Number).filter((v) => v > 0)
   const insufficientBalance = Boolean(user && selectedBet !== null && selectedBet * 100 > balance)
@@ -31,16 +40,28 @@ export function HomePage({
         <div className="lobby-actions">
           {user ? (
             <>
-              <div className="balance-display">
+              <button className="balance-display balance-display--button" onClick={() => setMenuOpen(true)}>
                 <span className="balance-icon">R$</span>
                 <strong>{(balance / 100).toFixed(2).replace('.', ',')}</strong>
-              </div>
-              <button className="pill-button" onClick={onAccount}>👤 {(user.name?.trim() || user.email).slice(0, 1).toUpperCase()}</button>
+                <Icon name="chevron-down" size={13} />
+              </button>
+              <button className="wallet-button" onClick={onOpenDeposit} aria-label="Depositar"><Icon name="wallet" size={17} /></button>
+              <button className="pill-button pill-button--avatar" onClick={() => setMenuOpen(true)}>{(user.username || user.name?.trim() || '?').slice(0, 1).toUpperCase()}</button>
+              {menuOpen && (
+                <ProfileMenu
+                  user={user}
+                  onClose={() => setMenuOpen(false)}
+                  onHome={() => {}}
+                  onProfile={onOpenProfile}
+                  onReferral={onOpenReferral}
+                  onLogout={onLogout}
+                />
+              )}
             </>
           ) : (
             <>
-              <button className="text-button" onClick={onAccount}>Entrar</button>
-              <button className="primary-button small" onClick={onAccount}>Cadastrar</button>
+              <button className="text-button" onClick={onLogin}>Entrar</button>
+              <button className="primary-button small" onClick={onRegister}>Cadastrar</button>
             </>
           )}
         </div>
@@ -54,7 +75,7 @@ export function HomePage({
             para multiplicar sua entrada antes de pousar.
           </p>
           {!user && (
-            <button className="free-play-button" onClick={onFreePlay}>◕ VOO DE TESTE</button>
+            <button className="free-play-button" onClick={onFreePlay}><span className="free-play-button__icon">▶</span> VOO DE TESTE</button>
           )}
         </div>
       </section>
@@ -80,9 +101,12 @@ export function HomePage({
       </section>
 
       <section className="bet-card">
+        <div className="bet-banner">
+          <span className="online-badge online-badge--overlay"><i /> Online</span>
+          <b>DESVIE DAS PEDRAS E GANHE R$</b>
+        </div>
         <div className="bet-head">
           <div><h2><img className="bet-head__icon" src="/game/coin.svg" alt="" /> INICIAR VOO</h2><p>Escolha sua entrada e tente pousar com o maior multiplicador!</p></div>
-          <span className="online-badge"><i /> Online</span>
         </div>
 
         <div className="bet-label"><span>ENTRADA</span></div>
@@ -104,18 +128,24 @@ export function HomePage({
         </div>
 
         {insufficientBalance && (
-          <p className="insufficient-balance">◉ Saldo insuficiente. Faça login ou recarregue.</p>
+          <p className="insufficient-balance">◉ Saldo insuficiente. Deposite para continuar.</p>
         )}
+        {user && <p className="your-balance">Seu saldo: <b>R$ {(balance / 100).toFixed(2).replace('.', ',')}</b></p>}
 
         <button
           className="play-button"
-          disabled={starting || selectedBet === null || insufficientBalance || !user}
-          onClick={() => { if (selectedBet !== null) onPlay(selectedBet) }}
+          disabled={starting || selectedBet === null}
+          onClick={() => {
+            if (selectedBet === null) return
+            if (!user) { onRegister(); return }
+            if (insufficientBalance) { onOpenDeposit(); return }
+            onPlay(selectedBet)
+          }}
         >
           {starting ? 'PREPARANDO DECOLAGEM...' :
            selectedBet === null ? 'ESCOLHA UM VALOR' :
-           !user ? 'FAÇA LOGIN PARA VOAR' :
-           insufficientBalance ? 'SALDO INSUFICIENTE' :
+           !user ? 'CRIAR CONTA PARA VOAR' :
+           insufficientBalance ? '💳 DEPOSITAR PARA JOGAR' :
            '🚀 DECOLAR'}
         </button>
 

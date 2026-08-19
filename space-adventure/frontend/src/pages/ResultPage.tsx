@@ -44,7 +44,7 @@ function Hero({ crashed, won }: { crashed: boolean; won: boolean }) {
   )
 }
 
-export function ResultPage({ stats, onAgain, onHome }: { stats: FlightStats; user?: User | null; onAgain: () => void; onHome: () => void }) {
+export function ResultPage({ stats, onAgain, onHome, onCreateAccount }: { stats: FlightStats; user?: User | null; onAgain: () => void; onHome: () => void; onCreateAccount: () => void }) {
   const isFree = stats.stakeAmount === undefined || stats.stakeAmount === 0
   const finalMultiplier = stats.multiplier ?? Math.min(5, 1.03 ** Math.max(0, stats.hits - 1))
   const prizeValue = (stats.coinsEarned ?? 0) / 100
@@ -55,29 +55,35 @@ export function ResultPage({ stats, onAgain, onHome }: { stats: FlightStats; use
 
   if (isFree) {
     const won = !stats.crashed
+    const wouldHaveWon = FREE_PLAY_REFERENCE_STAKE * finalMultiplier
     return (
-      <main className="page result-page starfield">
-        <div className={`result-card ${won ? 'result-card--win' : 'result-card--loss'}`}>
+      <div className="modal-backdrop" role="presentation" onClick={onHome}>
+        <section className={`modal-card result-card ${won ? 'result-card--win' : 'result-card--loss'}`} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+          <button type="button" className="modal-close" aria-label="Fechar" onClick={onHome}><Icon name="close" size={16} /></button>
           {won && <Confetti />}
+          <span className="result-free-badge">MODO GRÁTIS</span>
           <Hero crashed={stats.crashed} won={won} />
-          <span className={`result-badge ${stats.crashed ? 'result-badge--danger' : ''}`}>{stats.crashed ? 'NAVE COLIDIU' : 'VOO CONCLUÍDO'}</span>
-          <h2>{stats.crashed ? 'ATÉ A PRÓXIMA, PILOTO!' : 'POUSO SEGURO!'}</h2>
-          <p>Você coletou {stats.hits} moedas{stats.crashed ? ' antes de colidir' : ''} e chegou a:</p>
+          <h2>{won ? 'MANDOU MUITO BEM!' : 'QUASE!'}</h2>
           <div className={`result-prize-box ${won ? 'result-prize-box--win' : 'result-prize-box--loss'}`}>
             <span>VALOR ALCANÇADO</span>
-            <b>R$ {(stats.crashed ? 0 : FREE_PLAY_REFERENCE_STAKE * finalMultiplier).toFixed(2).replace('.', ',')}</b>
+            <b>R$ {(stats.crashed ? 0 : wouldHaveWon).toFixed(2).replace('.', ',')}</b>
           </div>
-          <p className="result-hint">Parabéns pelo seu desempenho no voo de teste!</p>
-          <button className="primary-button result-cta" onClick={onAgain}>🚀 VOAR NOVAMENTE</button>
-          <button className="text-button" onClick={onHome}>Voltar ao início</button>
-        </div>
-      </main>
+          <p className="result-hint">
+            {won
+              ? 'É isso que você teria sacado agora se estivesse jogando valendo. Crie sua conta e o próximo prêmio cai direto no seu Pix.'
+              : `As pedras venceram essa — mas você chegou a ${finalMultiplier.toFixed(2)}x. Jogando valendo, uma rodada boa dessas vira prêmio no Pix. Bora pra revanche?`}
+          </p>
+          <button className="primary-button result-cta" onClick={onCreateAccount}>Criar conta e jogar valendo</button>
+          <button className="text-button" onClick={onAgain}>Jogar grátis de novo</button>
+        </section>
+      </div>
     )
   }
 
   return (
-    <main className="page result-page starfield">
-      <div className={`result-card ${rewarded ? 'result-card--win' : 'result-card--loss'}`}>
+    <div className="modal-backdrop" role="presentation" onClick={onHome}>
+      <section className={`modal-card result-card ${rewarded ? 'result-card--win' : 'result-card--loss'}`} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="modal-close" aria-label="Fechar" onClick={onHome}><Icon name="close" size={16} /></button>
         {rewarded && <Confetti />}
         <Hero crashed={stats.crashed} won={rewarded} />
         <span className={`result-badge ${!rewarded ? 'result-badge--danger' : ''}`}>{stats.crashed ? (rewarded ? 'RESGATE GARANTIDO' : 'NAVE PERDIDA') : rewarded ? 'POUSO PREMIADO' : 'VOO ENCERRADO'}</span>
@@ -104,7 +110,7 @@ export function ResultPage({ stats, onAgain, onHome }: { stats: FlightStats; use
         </div>
         <button className="primary-button result-cta" onClick={onAgain}>↻ Voar novamente</button>
         <button className="text-button" onClick={onHome}>Voltar ao início</button>
-      </div>
-    </main>
+      </section>
+    </div>
   )
 }
