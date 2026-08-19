@@ -1,4 +1,4 @@
-export type IconName = 'chevron-left' | 'chevron-right' | 'chevron-down' | 'close' | 'timer' | 'volume' | 'volume-off' | 'flame' | 'cashout' | 'mail' | 'lock' | 'user' | 'phone' | 'home' | 'users' | 'settings' | 'logout' | 'share' | 'copy' | 'wallet' | 'card-id' | 'eye' | 'eye-off' | 'gift' | 'check'
+export type IconName = 'chevron-left' | 'chevron-right' | 'chevron-down' | 'close' | 'timer' | 'volume' | 'volume-off' | 'flame' | 'cashout' | 'mail' | 'lock' | 'user' | 'phone' | 'home' | 'users' | 'settings' | 'logout' | 'share' | 'copy' | 'wallet' | 'card-id' | 'eye' | 'eye-off' | 'gift' | 'check' | 'rocket'
 
 export function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
   const common = {
@@ -192,6 +192,17 @@ export function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
 
     case 'check':
       return <svg {...common}><polyline points="4.5 12.5 9.5 17.5 19.5 6.5" /></svg>
+
+    case 'rocket':
+      return (
+        <svg {...common} strokeLinejoin="round">
+          <path d="M9.3 14.5V9c0-3.6 1.6-5.8 2.7-6.5C13.1 3.2 14.7 5.4 14.7 9v5.5Z" />
+          <circle cx="12" cy="9" r="1.5" />
+          <path d="M9.3 13.2 6.5 16v2.5L9 17.7" />
+          <path d="M14.7 13.2 17.5 16v2.5L15 17.7" />
+          <path d="M10.5 16.5c0 1.6.6 2.9 1.5 3.8.9-.9 1.5-2.2 1.5-3.8" />
+        </svg>
+      )
 
     case 'gift':
       return (

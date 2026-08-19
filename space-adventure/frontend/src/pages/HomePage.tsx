@@ -289,7 +289,7 @@ export function HomePage({
           <>
             <button onClick={onOpenDeposit}><Icon name="wallet" size={19} /><small>Depositar</small></button>
             <button onClick={onOpenReferral}><Icon name="gift" size={19} /><small>Indique</small></button>
-            <button className="mobile-bottom-nav__main" onClick={scrollToBet} aria-label="Jogar"><span>🚀</span></button>
+            <button className="mobile-bottom-nav__main" onClick={scrollToBet} aria-label="Jogar"><span className="mobile-bottom-nav__ring" /><Icon name="rocket" size={24} /></button>
             <button onClick={onOpenProfile}><Icon name="user" size={19} /><small>Perfil</small></button>
             <button onClick={onLogout}><Icon name="logout" size={19} /><small>Sair</small></button>
           </>
@@ -297,7 +297,7 @@ export function HomePage({
           <>
             <button onClick={onRegister}><Icon name="wallet" size={19} /><small>Depositar</small></button>
             <button onClick={onRegister}><Icon name="cashout" size={19} /><small>Sacar</small></button>
-            <button className="mobile-bottom-nav__main" onClick={onFreePlay} aria-label="Jogar grátis"><span>🚀</span></button>
+            <button className="mobile-bottom-nav__main" onClick={onFreePlay} aria-label="Jogar grátis"><span className="mobile-bottom-nav__ring" /><Icon name="rocket" size={24} /></button>
             <button onClick={onRegister}><Icon name="card-id" size={19} /><small>Registrar</small></button>
             <button onClick={onLogin}><Icon name="user" size={19} /><small>Entrar</small></button>
           </>

@@ -6,7 +6,7 @@ import { Icon, type IconName } from './Icon'
 
 // Notificações e Antifraude foram tiradas da navegação a pedido — as páginas continuam existindo
 // (rotas abaixo) para não perder o controle de fraude, só não aparecem mais no menu lateral.
-const menu=[['/','Dashboard','dashboard'],['/usuarios','Usuários','users'],['/depositos','Depósitos','deposit'],['/saques','Saques','withdrawal'],['/afiliados','Afiliados','affiliate'],['/bonus-taxas','Bônus e taxas','gift'],['/dificuldade-space','Dificuldade — Space','sliders'],['/configuracoes','Configurações gerais','settings'],['/gateway','Gateway Zypher','gateway']] as [string,string,IconName][]
+const menu=[['/','Dashboard','dashboard'],['/usuarios','Usuários','users'],['/depositos','Depósitos','deposit'],['/saques','Saques','withdrawal'],['/afiliados','Afiliados','affiliate'],['/bonus-taxas','Bônus e taxas','gift'],['/economia','Economia','coins'],['/dificuldade-space','Dificuldade — Space','sliders'],['/configuracoes','Configurações gerais','settings'],['/gateway','Gateway & RTP','gateway']] as [string,string,IconName][]
 const dateFmt=(v:unknown)=>v?new Date(String(v)).toLocaleString('pt-BR'):'—'
 const STATUS_SUCCESS=['CONFIRMED','ACTIVE','COMPLETED','PAID','AVAILABLE','FINISHED','APPROVED','ATIVO','SIM']
 const STATUS_DANGER=['FAILED','BLOCKED','CANCELED','CANCELLED','REJECTED','REFUNDED','RETAINED','DISPUTED','INVALIDATED','INACTIVE','BLOQUEADO','NÃO']
@@ -37,18 +37,21 @@ function Layout({admin,onLogout}:{admin:Admin;onLogout:()=>void}) {
     const load=()=>api<{unread:number}>('/notifications?read=false').then(d=>setUnread(d.unread)).catch(()=>{})
     load(); const timer=setInterval(load,30000); return ()=>clearInterval(timer)
   },[])
-  return <div className="layout"><ToastHost/><aside><div className="brand"><img src="/logo-topo.png" alt="Space Adventure" className="brand-logo"/><span>Admin</span></div><nav>{menu.map(([to,label,icon])=><NavLink key={to} to={to} end={to==='/'}><i><Icon name={icon} size={17}/></i>{label}{to==='/notificacoes'&&unread>0&&<em className="nav-badge">{unread}</em>}</NavLink>)}</nav><div className="account"><span>{admin.name[0]}</span><div><b>{admin.name}</b><small>{admin.role}</small></div><button onClick={onLogout} aria-label="Sair"><Icon name="logout" size={16}/></button></div></aside><main className="content"><Routes>
+  const visibleMenu=admin.role==='SUPER_ADMIN'?[...menu,['/auditoria','Auditoria','list'] as [string,string,IconName]]:menu
+  return <div className="layout"><ToastHost/><aside><div className="brand"><img src="/logo-topo.png" alt="Space Adventure" className="brand-logo"/><span>Admin</span></div><nav>{visibleMenu.map(([to,label,icon])=><NavLink key={to} to={to} end={to==='/'}><i><Icon name={icon} size={17}/></i>{label}{to==='/notificacoes'&&unread>0&&<em className="nav-badge">{unread}</em>}</NavLink>)}</nav><div className="account"><span>{admin.name[0]}</span><div><b>{admin.name}</b><small>{admin.role}</small></div><button onClick={onLogout} aria-label="Sair"><Icon name="logout" size={16}/></button></div></aside><main className="content"><Routes>
     <Route path="/" element={<Dashboard/>}/>
     <Route path="/usuarios" element={<UsersPage/>}/>
     <Route path="/depositos" element={<FinancePage title="Depósitos" endpoint="/deposits" statuses={['PENDING','PROCESSING','CONFIRMED','REFUNDED','FAILED','CANCELED']} isWithdrawal={false}/>}/>
     <Route path="/saques" element={<FinancePage title="Saques" endpoint="/withdrawals" statuses={['PENDING','APPROVED','PROCESSING','COMPLETED','REJECTED','FAILED','CANCELED','REFUNDED']} isWithdrawal/>}/>
     <Route path="/afiliados" element={<AffiliatesPage canEdit={admin.role==='SUPER_ADMIN'||admin.role==='ADMIN'}/>}/>
     <Route path="/bonus-taxas" element={<BonusPage canEdit={admin.role==='SUPER_ADMIN'||admin.role==='ADMIN'}/>}/>
+    <Route path="/economia" element={<EconomyPage/>}/>
     <Route path="/notificacoes" element={<NotificationsPage onChange={n=>setUnread(n)}/>}/>
     <Route path="/dificuldade-space" element={<SpaceDifficultyPage canEdit={admin.role==='SUPER_ADMIN'||admin.role==='ADMIN'}/>}/>
     <Route path="/configuracoes" element={<SettingsPage canEdit={admin.role==='SUPER_ADMIN'||admin.role==='ADMIN'}/>}/>
     <Route path="/gateway" element={<GatewayPage canEdit={admin.role==='SUPER_ADMIN'}/>}/>
-    <Route path="/antifraude" element={<DataPage title="Antifraude" endpoint="/fraud-alerts"/>}/>
+    <Route path="/antifraude" element={<FraudPage canEdit={admin.role==='SUPER_ADMIN'||admin.role==='ADMIN'}/>}/>
+    <Route path="/auditoria" element={<AuditLogPage/>}/>
   </Routes></main></div>
 }
 function Header({title,subtitle,children}:{title:string;subtitle:string;children?:ReactNode}){return <header><div><h1>{title}</h1><p>{subtitle}</p></div>{children}</header>}
@@ -277,7 +280,35 @@ function GatewayPage({canEdit}:{canEdit:boolean}){
  const save=async()=>{if(!gateway)return;setMessage('Salvando…');try{const data=await api<{gateway:Gateway}>('/payment-gateway',{method:'PUT',body:JSON.stringify({enabled:gateway.enabled,baseUrl:gateway.baseUrl,clientId:gateway.clientId,...(secret?{clientSecret:secret}:{})})});setGateway(data.gateway);setSecret('');setMessage('Configuração salva com segurança.');notify('Gateway Zypher atualizado.')}catch(error){setMessage(error instanceof Error?error.message:'Falha ao salvar.')}}
  const test=async()=>{setTesting(true);setMessage('Testando conexão…');try{const data=await api<{message:string}>('/payment-gateway/test',{method:'POST'});setMessage(data.message)}catch(error){setMessage(error instanceof Error?error.message:'Falha no teste.')}finally{setTesting(false)}}
  if(!gateway)return <div className="empty">Carregando gateway…</div>
- return <><Header title="Gateway Zypher" subtitle="Credenciais usadas para cash-in PIX e cash-out."/><div className="gateway-intro"><span>◇</span><div><b>Zypher Pay</b><p>A API autentica cada requisição pelos headers X-Client-Id e X-Client-Secret. O Secret ID é criptografado e nunca volta para o navegador.</p></div><em className={gateway.enabled?'connected':'disabled'}>{gateway.enabled?'Habilitado':'Desabilitado'}</em></div><section className="panel gateway-form"><div className="config-heading"><h2>Credenciais da API</h2><p>Você encontra essas informações no painel Zypher em Dashboard → API.</p></div><label className="explained-field"><span>URL da API</span><small>Endereço base da Zypher. Em produção, use https://api.zypher.global.</small><input type="url" value={gateway.baseUrl} disabled={!canEdit} onChange={e=>setGateway({...gateway,baseUrl:e.target.value})}/></label><label className="explained-field"><span>Client ID</span><small>Identifica a chave utilizada pela sua aplicação.</small><input value={gateway.clientId} disabled={!canEdit} autoComplete="off" onChange={e=>setGateway({...gateway,clientId:e.target.value})}/></label><label className="explained-field"><span>Secret ID</span><small>{gateway.hasClientSecret?'Já existe um segredo salvo. Deixe vazio para mantê-lo ou digite outro para substituir.':'Informe o segredo da chave no primeiro cadastro.'}</small><input type="password" value={secret} disabled={!canEdit} autoComplete="new-password" placeholder={gateway.hasClientSecret?'••••••••••••••••':'Cole o Secret ID'} onChange={e=>setSecret(e.target.value)}/></label><label className="switch-field"><input type="checkbox" checked={gateway.enabled} disabled={!canEdit} onChange={e=>setGateway({...gateway,enabled:e.target.checked})}/><span><b>Habilitar Zypher</b><small>Ativa o gateway para novas operações. Salve e teste antes de usar em produção.</small></span></label><div className="gateway-security"><b>Proteção das credenciais</b><p>O Secret ID é armazenado com AES-256-GCM. Trocas de configuração ficam registradas nos logs de auditoria sem gravar o segredo.</p></div><div className="config-actions">{canEdit&&<button className="save-button" onClick={save}>Salvar credenciais</button>}<button className="test-button" disabled={testing||!gateway.hasClientSecret} onClick={test}>{testing?'Testando…':'Testar conexão'}</button>{message&&<span className="save-message">{message}</span>}</div></section></>
+ return <><Header title="Gateway & RTP" subtitle="Credenciais de pagamento e RTP das rodadas com valor real."/><div className="gateway-intro"><span>◇</span><div><b>Zypher Pay</b><p>A API autentica cada requisição pelos headers X-Client-Id e X-Client-Secret. O Secret ID é criptografado e nunca volta para o navegador.</p></div><em className={gateway.enabled?'connected':'disabled'}>{gateway.enabled?'Habilitado':'Desabilitado'}</em></div><section className="panel gateway-form"><div className="config-heading"><h2>Credenciais da API</h2><p>Você encontra essas informações no painel Zypher em Dashboard → API.</p></div><label className="explained-field"><span>URL da API</span><small>Endereço base da Zypher. Em produção, use https://api.zypher.global.</small><input type="url" value={gateway.baseUrl} disabled={!canEdit} onChange={e=>setGateway({...gateway,baseUrl:e.target.value})}/></label><label className="explained-field"><span>Client ID</span><small>Identifica a chave utilizada pela sua aplicação.</small><input value={gateway.clientId} disabled={!canEdit} autoComplete="off" onChange={e=>setGateway({...gateway,clientId:e.target.value})}/></label><label className="explained-field"><span>Secret ID</span><small>{gateway.hasClientSecret?'Já existe um segredo salvo. Deixe vazio para mantê-lo ou digite outro para substituir.':'Informe o segredo da chave no primeiro cadastro.'}</small><input type="password" value={secret} disabled={!canEdit} autoComplete="new-password" placeholder={gateway.hasClientSecret?'••••••••••••••••':'Cole o Secret ID'} onChange={e=>setSecret(e.target.value)}/></label><label className="switch-field"><input type="checkbox" checked={gateway.enabled} disabled={!canEdit} onChange={e=>setGateway({...gateway,enabled:e.target.checked})}/><span><b>Habilitar Zypher</b><small>Ativa o gateway para novas operações. Salve e teste antes de usar em produção.</small></span></label><div className="gateway-security"><b>Proteção das credenciais</b><p>O Secret ID é armazenado com AES-256-GCM. Trocas de configuração ficam registradas nos logs de auditoria sem gravar o segredo.</p></div><div className="config-actions">{canEdit&&<button className="save-button" onClick={save}>Salvar credenciais</button>}<button className="test-button" disabled={testing||!gateway.hasClientSecret} onClick={test}>{testing?'Testando…':'Testar conexão'}</button>{message&&<span className="save-message">{message}</span>}</div></section>
+  <RtpPanel canEdit={canEdit}/>
+ </>
+}
+
+// ---------- RTP das rodadas com valor real ----------
+type RtpSetting={percentage:number;enabled:boolean;reason:string;updatedAt:string|null}
+function RtpPanel({canEdit}:{canEdit:boolean}){
+  const [rtp,setRtp]=useState<RtpSetting|null>(null),[message,setMessage]=useState('')
+  const reload=()=>api<{setting:RtpSetting}>('/rtp-setting').then(d=>setRtp(d.setting)).catch(e=>setMessage(e instanceof Error?e.message:'Erro ao carregar RTP.'))
+  useEffect(()=>{reload()},[])
+  if(!rtp)return <section className="panel"><div className="empty">Carregando RTP…</div></section>
+  const save=async(e:FormEvent<HTMLFormElement>)=>{
+    e.preventDefault(); const f=new FormData(e.currentTarget)
+    const payload={percentage:Number(f.get('percentage')),enabled:f.get('enabled')==='on',reason:String(f.get('reason'))}
+    setMessage('Salvando…')
+    try{const data=await api<{setting:RtpSetting}>('/rtp-setting',{method:'PUT',body:JSON.stringify(payload)});setRtp(data.setting);setMessage('RTP atualizado.');notify('RTP das rodadas com valor real atualizado.')}
+    catch(err){setMessage(err instanceof Error?err.message:'Erro ao salvar.')}
+  }
+  return <section className="panel">
+    <div className="panel-heading"><h2>RTP — rodadas com valor real</h2><p>Percentual médio devolvido aos jogadores nas rodadas pagas com saldo real. Independente do RTP do voo grátis, ajustado em Dificuldade — Space.</p></div>
+    <form className="form-grid settings-grid" onSubmit={save}>
+      <label>RTP (%)<input type="number" name="percentage" min="0" max="100" step="0.1" disabled={!canEdit} defaultValue={rtp.percentage}/><small>Maior valor = jogadores recebem de volta, em média, uma fatia maior do que apostam.</small></label>
+      <label className="switch-row wide"><input type="checkbox" name="enabled" disabled={!canEdit} defaultChecked={rtp.enabled}/><span><strong>RTP customizado habilitado</strong><small>Quando desligado, o sistema usa o valor padrão interno em vez do percentual acima.</small></span></label>
+      <label className="wide">Motivo da alteração<input name="reason" minLength={5} maxLength={300} disabled={!canEdit} placeholder="Obrigatório — fica registrado no log de auditoria"/></label>
+      {canEdit&&<div className="wide form-actions"><button className="button primary">Salvar RTP</button>{message&&<span className="save-message">{message}</span>}</div>}
+    </form>
+    {rtp.reason&&<p>Último motivo registrado: <em>{rtp.reason}</em>{rtp.updatedAt?` — ${dateFmt(rtp.updatedAt)}`:''}</p>}
+  </section>
 }
 
 // ---------- Configurações gerais ----------
@@ -611,7 +642,7 @@ function NotificationsPage({onChange}:{onChange:(unread:number)=>void}){
 
 // ---------- Usuários ----------
 type UserRow={id:string;name:string;username:string|null;email:string|null;phone:string|null;coinBalance:number;isActive:boolean;isBlocked:boolean;isInfluencer:boolean;excludedFromRanking:boolean;receivedSignupBonus:boolean;createdAt:string;_count?:{games:number}}
-type UserDetail=UserRow&{games:{id:string;score:number;stakeAmount:number;coinsRewarded:number;status:string;startedAt:string}[];transactions:{id:string;type:string;amount:number;reason:string;createdAt:string}[];ownedAffiliate:{id:string;code:string;status:string;cpaAmount:number;cpaRtpMode:string;cpaRetentionEnabled:boolean;cpaCycleSize:number;cpaRetainedPositions:string;availableBalance:number}|null}
+type UserDetail=UserRow&{games:{id:string;score:number;stakeAmount:number;coinsRewarded:number;status:string;startedAt:string}[];transactions:{id:string;type:string;amount:number;reason:string;createdAt:string}[];notes:{id:string;content:string;createdAt:string;admin:{name:string}}[];alerts:{id:string;type:string;description:string;riskLevel:string;status:string;createdAt:string}[];ownedAffiliate:{id:string;code:string;status:string;cpaAmount:number;cpaRtpMode:string;cpaRetentionEnabled:boolean;cpaCycleSize:number;cpaRetainedPositions:string;availableBalance:number}|null}
 function UsersPage(){
   const [items,setItems]=useState<UserRow[]>([]),[total,setTotal]=useState(0),[page,setPage]=useState(1)
   const [searchInput,setSearchInput]=useState(''),[search,setSearch]=useState('')
@@ -651,9 +682,14 @@ function UsersPage(){
   </>
 }
 function UserEditor({id,onClose}:{id:string;onClose:()=>void}){
-  const [user,setUser]=useState<UserDetail|null>(null),[message,setMessage]=useState('')
+  const [user,setUser]=useState<UserDetail|null>(null),[message,setMessage]=useState(''),[noteDraft,setNoteDraft]=useState('')
   const reload=()=>api<{user:UserDetail}>(`/users/${id}`).then(d=>setUser(d.user))
   useEffect(()=>{reload()},[id])
+  const addNote=async(e:FormEvent<HTMLFormElement>)=>{
+    e.preventDefault(); if(!noteDraft.trim())return
+    try{await api(`/users/${id}/notes`,{method:'POST',body:JSON.stringify({content:noteDraft})});setNoteDraft('');notify('Nota adicionada.');reload()}
+    catch(err){setMessage(err instanceof Error?err.message:'Erro ao salvar nota.')}
+  }
   if(!user)return <div className="admin-modal-backdrop"><section className="admin-modal user-editor"><div className="empty">Carregando…</div></section></div>
   const saveAccount=async(e:FormEvent<HTMLFormElement>)=>{
     e.preventDefault(); const f=new FormData(e.currentTarget)
@@ -765,17 +801,148 @@ function UserEditor({id,onClose}:{id:string;onClose:()=>void}){
         {(user.transactions||[]).map(t=><tr key={t.id}><td>{t.type}</td><td>{money(t.amount)}</td><td>{t.reason}</td><td>{dateFmt(t.createdAt)}</td></tr>)}
         {!user.transactions?.length&&<tr><td colSpan={4} className="empty">Nenhuma transação.</td></tr>}
       </tbody></table></div></article>
+      <article className="modal-card"><div className="panel-heading"><h3>Notas administrativas</h3></div><div className="table-wrap"><table><thead><tr><th>Nota</th><th>Admin</th><th>Data</th></tr></thead><tbody>
+        {(user.notes||[]).map(n=><tr key={n.id}><td>{n.content}</td><td>{n.admin.name}</td><td>{dateFmt(n.createdAt)}</td></tr>)}
+        {!user.notes?.length&&<tr><td colSpan={3} className="empty">Nenhuma nota ainda.</td></tr>}
+      </tbody></table></div>
+        <form className="inline-form" onSubmit={addNote}>
+          <input placeholder="Adicionar nota…" value={noteDraft} onChange={e=>setNoteDraft(e.target.value)} minLength={2} required/>
+          <button className="button tiny primary">Adicionar</button>
+        </form>
+      </article>
+      <article className="modal-card"><div className="panel-heading"><h3>Alertas de fraude</h3></div><div className="table-wrap"><table><thead><tr><th>Tipo</th><th>Risco</th><th>Status</th><th>Data</th></tr></thead><tbody>
+        {(user.alerts||[]).map(a=><tr key={a.id}><td>{a.type}</td><td><Status value={a.riskLevel}/></td><td><Status value={a.status}/></td><td>{dateFmt(a.createdAt)}</td></tr>)}
+        {!user.alerts?.length&&<tr><td colSpan={4} className="empty">Nenhum alerta.</td></tr>}
+      </tbody></table></div></article>
     </div>
     </div>
   </section></div>
 }
 
-// ---------- Tabela genérica (Antifraude) ----------
-function DataPage({title,endpoint}:{title:string;endpoint:string}){
- const [items,setItems]=useState<Record<string,unknown>[]>([]),[error,setError]=useState(''),[search,setSearch]=useState('')
- useEffect(()=>{api<{items:Record<string,unknown>[]}>(endpoint).then(d=>setItems(d.items||[])).catch(e=>setError(e.message))},[endpoint])
- const shown=items.filter(x=>JSON.stringify(x).toLowerCase().includes(search.toLowerCase()))
- return <><Header title={title} subtitle={`${items.length} registros encontrados.`}/><div className="toolbar"><input placeholder="Buscar…" value={search} onChange={e=>setSearch(e.target.value)}/><button>Exportar</button></div>{error?<div className="error">{error}</div>:<section className="panel table-wrap"><table><thead><tr><th>Identificação</th><th>Detalhes</th><th>Status</th><th>Data</th></tr></thead><tbody>{shown.map((x,i)=><tr key={String(x.id||i)}><td><b>{String(x.name||x.userId||x.id||'Registro')}</b><small>{String(x.email||x.type||'')}</small></td><td>{String(x.action||x.reason||x.role||'—')}</td><td><span className={`badge ${String(x.status||x.riskLevel||'ACTIVE').toLowerCase()}`}>{String(x.status||x.riskLevel||'ATIVO')}</span></td><td>{x.createdAt?new Date(String(x.createdAt)).toLocaleDateString('pt-BR'):'—'}</td></tr>)}</tbody></table>{!shown.length&&<div className="empty">Nenhum registro para exibir.</div>}</section>}</>
+// ---------- Antifraude ----------
+const FRAUD_STATUSES=['OPEN','REVIEWING','CONFIRMED','DISMISSED']
+type FraudAlertRow={id:string;userId:string;user:{name:string;email:string|null};gameId:string|null;type:string;description:string;evidence:string|null;riskLevel:string;status:string;reviewedByAdminId:string|null;reviewedAt:string|null;createdAt:string}
+type FraudAlertDetail=Omit<FraudAlertRow,'user'>&{
+  user:{id:string;name:string;email:string|null;coinBalance:number;isBlocked:boolean}
+  game:{id:string;score:number;stakeAmount:number;coinsRewarded:number;status:string;startedAt:string}|null
+  reviewedBy:{name:string}|null
+}
+function FraudPage({canEdit}:{canEdit:boolean}){
+  const [items,setItems]=useState<FraudAlertRow[]>([]),[search,setSearch]=useState(''),[status,setStatus]=useState(''),[openId,setOpenId]=useState<string|null>(null),[error,setError]=useState('')
+  const reload=()=>api<{items:FraudAlertRow[]}>('/fraud-alerts').then(d=>setItems(d.items)).catch(e=>setError(e instanceof Error?e.message:'Erro ao carregar.'))
+  useEffect(()=>{reload()},[])
+  const shown=items.filter(x=>(!status||x.status===status)&&(!search||JSON.stringify(x).toLowerCase().includes(search.toLowerCase())))
+  return <><Header title="Antifraude" subtitle={`${items.length} alertas registrados (últimos 200).`}/>
+    <section className="panel filters">
+      <input placeholder="Buscar por jogador, tipo ou descrição" value={search} onChange={e=>setSearch(e.target.value)}/>
+      <select value={status} onChange={e=>setStatus(e.target.value)}><option value="">Todos os status</option>{FRAUD_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}</select>
+    </section>
+    {error&&<div className="error">{error}</div>}
+    <section className="panel table-wrap"><table><thead><tr><th>Jogador</th><th>Tipo</th><th>Descrição</th><th>Risco</th><th>Status</th><th>Data</th><th></th></tr></thead><tbody>
+      {shown.map(a=><tr key={a.id}>
+        <td><b>{a.user.name}</b><small>{a.user.email}</small></td>
+        <td>{a.type}</td>
+        <td>{a.description}</td>
+        <td><Status value={a.riskLevel}/></td>
+        <td><Status value={a.status}/></td>
+        <td>{dateFmt(a.createdAt)}</td>
+        <td><button className="button tiny secondary" onClick={()=>setOpenId(a.id)}>Detalhes</button></td>
+      </tr>)}
+      {!shown.length&&<tr><td colSpan={7} className="empty">Nenhum alerta encontrado.</td></tr>}
+    </tbody></table></section>
+    {openId&&<FraudAlertModal id={openId} canEdit={canEdit} onClose={()=>{setOpenId(null);reload()}}/>}
+  </>
+}
+function FraudAlertModal({id,canEdit,onClose}:{id:string;canEdit:boolean;onClose:()=>void}){
+  const [alert,setAlert]=useState<FraudAlertDetail|null>(null),[status,setStatusValue]=useState(''),[message,setMessage]=useState('')
+  const reload=()=>api<{alert:FraudAlertDetail}>(`/fraud-alerts/${id}`).then(d=>{setAlert(d.alert);setStatusValue(d.alert.status)})
+  useEffect(()=>{reload()},[id])
+  if(!alert)return <div className="admin-modal-backdrop"><section className="admin-modal"><div className="empty">Carregando…</div></section></div>
+  const save=async()=>{
+    setMessage('Salvando…')
+    try{await api(`/fraud-alerts/${id}/status`,{method:'PATCH',body:JSON.stringify({status})});setMessage('Status atualizado.');notify('Status do alerta atualizado.');reload()}
+    catch(err){setMessage(err instanceof Error?err.message:'Erro ao salvar.')}
+  }
+  return <div className="admin-modal-backdrop"><section className="admin-modal" role="dialog" aria-modal="true">
+    <header className="modal-heading"><div><p className="eyebrow">ALERTA DE FRAUDE</p><h2>{alert.type}</h2><small>{alert.user.name} · {alert.user.email}</small></div><button className="modal-close" onClick={onClose} aria-label="Fechar"><Icon name="close" size={18}/></button></header>
+    <div className="modal-body">
+      {message&&<div className="save-message modal-message">{message}</div>}
+      <div className="user-summary">
+        <article><small>Risco</small><strong><Status value={alert.riskLevel}/></strong></article>
+        <article><small>Status</small><strong><Status value={alert.status}/></strong></article>
+        <article><small>Saldo do jogador</small><strong>{money(alert.user.coinBalance)}</strong></article>
+        <article><small>Jogador bloqueado</small><strong>{alert.user.isBlocked?'Sim':'Não'}</strong></article>
+      </div>
+      <article className="modal-card wide"><div className="panel-heading"><h3>Descrição</h3></div><p>{alert.description}</p></article>
+      {alert.evidence&&<article className="modal-card wide"><div className="panel-heading"><h3>Evidência</h3></div><pre style={{whiteSpace:'pre-wrap',wordBreak:'break-word'}}>{alert.evidence}</pre></article>}
+      {alert.game&&<article className="modal-card wide"><div className="panel-heading"><h3>Jogada relacionada</h3></div>
+        <div className="user-summary">
+          <article><small>Aposta</small><strong>{money(alert.game.stakeAmount)}</strong></article>
+          <article><small>Prêmio</small><strong>{money(alert.game.coinsRewarded)}</strong></article>
+          <article><small>Pontuação</small><strong>{alert.game.score}</strong></article>
+          <article><small>Status</small><strong><Status value={alert.game.status}/></strong></article>
+        </div>
+      </article>}
+      {alert.reviewedBy&&<p>Revisado por <b>{alert.reviewedBy.name}</b> em {dateFmt(alert.reviewedAt)}.</p>}
+      {canEdit&&<article className="modal-card wide"><div className="panel-heading"><h3>Alterar status</h3></div>
+        <div className="inline-form"><select value={status} onChange={e=>setStatusValue(e.target.value)}>{FRAUD_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}</select><button className="button primary" disabled={status===alert.status} onClick={save}>Salvar status</button></div>
+      </article>}
+    </div>
+  </section></div>
+}
+
+// ---------- Log de auditoria ----------
+type AuditLogItem={id:string;adminId:string|null;admin:{name:string}|null;action:string;resource:string;resourceId:string|null;previousData:string|null;newData:string|null;reason:string|null;ip:string|null;userAgent:string|null;createdAt:string}
+function prettyJson(v:string|null){if(!v)return null;try{return JSON.stringify(JSON.parse(v),null,2)}catch{return v}}
+function AuditLogPage(){
+  const [items,setItems]=useState<AuditLogItem[]>([]),[search,setSearch]=useState(''),[error,setError]=useState('')
+  useEffect(()=>{api<{items:AuditLogItem[]}>('/audit-logs').then(d=>setItems(d.items)).catch(e=>setError(e instanceof Error?e.message:'Erro ao carregar.'))},[])
+  const shown=items.filter(x=>!search||JSON.stringify(x).toLowerCase().includes(search.toLowerCase()))
+  return <><Header title="Log de auditoria" subtitle={`${items.length} eventos registrados (últimos 300). Visível apenas para Super Admin.`}/>
+    <section className="panel filters"><input placeholder="Buscar por admin, ação ou recurso" value={search} onChange={e=>setSearch(e.target.value)}/></section>
+    {error?<div className="error">{error}</div>:<section className="panel table-wrap"><table><thead><tr><th>Admin</th><th>Ação</th><th>Recurso</th><th>Motivo</th><th>Data</th><th>Detalhes</th></tr></thead><tbody>
+      {shown.map(x=><tr key={x.id}>
+        <td>{x.admin?.name||'Sistema'}</td>
+        <td><code>{x.action}</code></td>
+        <td>{x.resource}{x.resourceId?<small> · {x.resourceId.slice(0,8)}</small>:null}</td>
+        <td>{x.reason||'—'}</td>
+        <td>{dateFmt(x.createdAt)}</td>
+        <td>{(x.previousData||x.newData)?<details><summary>Ver</summary>
+          {x.previousData&&<pre style={{whiteSpace:'pre-wrap',wordBreak:'break-word'}}>{prettyJson(x.previousData)}</pre>}
+          {x.newData&&<pre style={{whiteSpace:'pre-wrap',wordBreak:'break-word'}}>{prettyJson(x.newData)}</pre>}
+        </details>:'—'}</td>
+      </tr>)}
+      {!shown.length&&<tr><td colSpan={6} className="empty">Nenhum evento encontrado.</td></tr>}
+    </tbody></table></section>}
+  </>
+}
+
+// ---------- Economia ----------
+type CoinTransactionItem={id:string;userId:string;user:{name:string}|null;gameId:string|null;adminId:string|null;admin:{name:string}|null;type:string;amount:number;balanceBefore:number;balanceAfter:number;reason:string;createdAt:string}
+type EconomySummaryRow={type:string;_sum:{amount:number|null};_count:number}
+function EconomyPage(){
+  const [items,setItems]=useState<CoinTransactionItem[]>([]),[totals,setTotals]=useState<EconomySummaryRow[]>([]),[search,setSearch]=useState('')
+  useEffect(()=>{
+    api<{items:CoinTransactionItem[]}>('/coin-transactions').then(d=>setItems(d.items))
+    api<{totals:EconomySummaryRow[]}>('/economy/summary').then(d=>setTotals(d.totals))
+  },[])
+  const shown=items.filter(x=>!search||JSON.stringify(x).toLowerCase().includes(search.toLowerCase()))
+  return <><Header title="Economia" subtitle="Ledger de moedas: origem e destino de cada crédito e débito."/>
+    <div className="cards">{totals.map(t=><article key={t.type}><i><Icon name="coins" size={17}/></i><small>{t.type}</small><strong className={(t._sum.amount||0)>=0?'amount-positive':'amount-negative'}>{money(t._sum.amount||0)}</strong></article>)}</div>
+    <section className="panel filters"><input placeholder="Buscar por jogador, admin, tipo ou motivo" value={search} onChange={e=>setSearch(e.target.value)}/></section>
+    <section className="panel table-wrap"><table><thead><tr><th>Jogador</th><th>Tipo</th><th>Valor</th><th>Saldo (antes → depois)</th><th>Motivo</th><th>Admin</th><th>Data</th></tr></thead><tbody>
+      {shown.map(t=><tr key={t.id}>
+        <td>{t.user?.name||'—'}</td>
+        <td><code>{t.type}</code></td>
+        <td className={t.amount>=0?'amount-positive':'amount-negative'}>{money(t.amount)}</td>
+        <td>{money(t.balanceBefore)} → {money(t.balanceAfter)}</td>
+        <td>{t.reason}</td>
+        <td>{t.admin?.name||'—'}</td>
+        <td>{dateFmt(t.createdAt)}</td>
+      </tr>)}
+      {!shown.length&&<tr><td colSpan={7} className="empty">Nenhuma transação encontrada.</td></tr>}
+    </tbody></table></section>
+  </>
 }
 export default function App(){
  const [admin,setAdmin]=useState<Admin|null>(null),[loading,setLoading]=useState(Boolean(session.get()));const nav=useNavigate()
