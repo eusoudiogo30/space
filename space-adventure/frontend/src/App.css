@@ -599,7 +599,8 @@ svg { vertical-align: -3px; flex-shrink: 0; }
 .result-page { display: flex; align-items: center; justify-content: center; padding: 20px 16px; }
 .result-card {
   position: relative; clip-path: var(--cut-lg); text-align: center; overflow: hidden;
-  padding: 34px 24px 28px; max-width: 380px; width: 100%;
+  --result-pad-x: 24px; --result-pad-top: 34px;
+  padding: var(--result-pad-top) var(--result-pad-x) 28px; max-width: 380px; width: 100%;
   background: linear-gradient(165deg, #1a1566 0%, #100c4a 55%, #0a0834 100%);
   border: 2px solid #2b2482;
   filter: drop-shadow(0 30px 70px rgba(0,0,0,.55));
@@ -619,7 +620,8 @@ svg { vertical-align: -3px; flex-shrink: 0; }
    character baked into the artwork itself, so no separate ship image or CSS burst is layered
    on top. Same full-bleed band pattern as the other card banners (.auth-card__banner etc). */
 .result-hero {
-  position: relative; z-index: 1; margin: -34px -24px 16px; aspect-ratio: 800 / 519;
+  position: relative; z-index: 1; aspect-ratio: 800 / 519;
+  margin: calc(-1 * var(--result-pad-top)) calc(-1 * var(--result-pad-x)) 16px;
   background-size: cover; background-position: center; background-repeat: no-repeat;
   border-bottom: 1px solid var(--border);
 }

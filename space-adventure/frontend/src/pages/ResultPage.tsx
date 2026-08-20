@@ -54,8 +54,8 @@ export function ResultPage({ stats, onAgain, onHome, onCreateAccount }: { stats:
         <section className={`modal-card result-card ${won ? 'result-card--win' : 'result-card--loss'}`} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
           <button type="button" className="modal-close" aria-label="Fechar" onClick={onHome}><Icon name="close" size={16} /></button>
           {won && <Confetti />}
-          <span className="result-free-badge">MODO GRÁTIS</span>
           <Hero />
+          <span className="result-free-badge">MODO GRÁTIS</span>
           <h2>{won ? 'MANDOU MUITO BEM!' : 'QUASE!'}</h2>
           <div className={`result-prize-box ${won ? 'result-prize-box--win' : 'result-prize-box--loss'}`}>
             <span>VALOR ALCANÇADO</span>
