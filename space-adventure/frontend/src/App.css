@@ -603,16 +603,18 @@ svg { vertical-align: -3px; flex-shrink: 0; }
 .result-page { display: flex; align-items: center; justify-content: center; padding: 20px 16px; }
 .result-card {
   position: relative; clip-path: var(--cut-lg); text-align: center; overflow: hidden;
-  padding: calc(65% - 20px) 24px 28px; max-width: 380px; width: 100%;
+  padding: 0 24px 28px; max-width: 380px; width: 100%;
   background-color: #0a0834; background-size: 100% auto; background-position: top center; background-repeat: no-repeat;
   filter: drop-shadow(0 30px 70px rgba(0,0,0,.55));
   animation: result-card-in .5s cubic-bezier(.2,.9,.25,1.35) both;
 }
 /* The artwork (win: gold ring + coins, loss: cracked asteroid) is the card itself — it already
    carries its own cut-corner gold/pink border and dark space background baked in, so the card
-   has no separate frame of its own. Its native aspect (800/519 = ~65% of width) sets how far
-   down the character extends; content padding-top matches that so text starts in the plain-
-   space area below the character rather than overlapping it. */
+   has no separate frame of its own. The ::before spacer reserves the image's native aspect
+   (800/519) scaled to the CARD's own width — not padding-top as a %, which resolves against
+   the containing block's (the fullscreen backdrop's) width instead and blew up on wide
+   viewports. Real content flows after it, starting in the plain-space area below the character. */
+.result-card::before { content: ''; display: block; width: 100%; aspect-ratio: 800 / 519; margin-bottom: 16px; }
 .result-card--win { background-image: url('/game/result-win-bg.jpg'); }
 .result-card--loss { background-image: url('/game/result-loss-bg.jpg'); }
 .result-free-badge { position: relative; z-index: 1; display: inline-block; margin-bottom: 12px; padding: 5px 16px; border: 1px solid rgba(255,217,74,.4); border-radius: 20px; background: rgba(255,217,74,.12); color: var(--gold); font-size: 10px; font-weight: 800; letter-spacing: 1.4px; }
