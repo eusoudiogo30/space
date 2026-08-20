@@ -53,9 +53,7 @@ export function AuthModal({ mode, onModeChange, onClose, onUser }: Props) {
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
       <section className="modal-card auth-card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-        {/* Placeholder slot for a promo banner image — falls back to the card's own gradient
-            (see .auth-card__banner in App.css) until /game/auth-banner.png is supplied. */}
-        <div className="auth-card__banner" aria-hidden="true" />
+        <div className={`auth-card__banner auth-card__banner--${mode}`} aria-hidden="true" />
 
         <header className="auth-card__head">
           <div className="auth-card__tabs" role="tablist" aria-label="Acesso à conta">

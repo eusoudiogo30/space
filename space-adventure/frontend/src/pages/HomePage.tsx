@@ -178,7 +178,6 @@ export function HomePage({
           <div className="bet-card__inner">
             <div className="bet-banner">
               <span className="online-badge online-badge--overlay"><i /> Online</span>
-              <b>DESVIE DAS PEDRAS E GANHE R$</b>
             </div>
             <div className="bet-head">
               <div><h2><img className="bet-head__icon" src="/game/coin.svg" alt="" /> INICIAR VOO</h2><p>Escolha sua entrada e tente pousar com o maior multiplicador!</p></div>

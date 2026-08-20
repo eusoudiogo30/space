@@ -226,13 +226,14 @@ svg { vertical-align: -3px; flex-shrink: 0; }
 @media (prefers-reduced-motion: reduce) { .bet-card__glow { animation: none; } }
 .bet-card__inner { position: relative; z-index: 1; border-radius: 25px; overflow: hidden; background: linear-gradient(160deg, #14105a, #0a0834); border: 1px solid rgba(255,255,255,.05); padding: 22px 20px 20px; }
 .bet-banner {
-  position: relative; margin: -22px -20px 18px; padding: 22px 20px 16px; text-align: center; border-bottom: 1px solid var(--border);
+  position: relative; margin: -22px -20px 18px; border-bottom: 1px solid var(--border);
+  aspect-ratio: 1000 / 367;
   background:
+    url('/game/bet-banner.jpg') center/cover no-repeat,
     radial-gradient(circle at 15% 25%, rgba(255,217,74,.25), transparent 55%),
     radial-gradient(circle at 85% 75%, rgba(124,232,255,.22), transparent 55%),
     linear-gradient(135deg, #1c1670, #0f0c4a);
 }
-.bet-banner b { display: block; font-family: 'Baloo 2', sans-serif; font-size: 19px; color: var(--gold); text-shadow: 0 2px 10px rgba(0,0,0,.4); letter-spacing: .2px; }
 .bet-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 18px; }
 .bet-head h2 { display: flex; align-items: center; gap: 6px; font-family: 'Baloo 2', sans-serif; font-size: 16px; font-weight: 700; color: var(--text-primary); }
 .bet-head__icon { width: 20px; height: 20px; object-fit: contain; }
@@ -645,18 +646,18 @@ svg { vertical-align: -3px; flex-shrink: 0; }
   filter: drop-shadow(0 24px 60px rgba(0,0,0,.4));
   animation: result-card-in .4s cubic-bezier(.2,.9,.3,1.25) both;
 }
-/* Banner slot: the image layer sits on top and simply fails to paint (no broken-image icon)
-   until /game/auth-banner.png is supplied, so the glow gradient underneath — matching the other
-   card banners (.bet-banner, .deposit-banner, .referral-banner) — reads as an intentional header
-   in the meantime rather than an empty gap or a broken-image glyph. */
+/* Banner art differs by tab: login vs. register each ship their own hero image (headline baked
+   into the artwork), swapped via the --login/--register modifier the mode drives in AuthModal. */
 .auth-card__banner {
-  margin: -22px -22px 18px; height: 104px; border-bottom: 1px solid var(--border);
+  margin: -22px -22px 18px; aspect-ratio: 1000 / 476; border-bottom: 1px solid var(--border);
   background:
-    url('/game/auth-banner.png') center/cover no-repeat,
     radial-gradient(circle at 20% 25%, rgba(124,232,255,.25), transparent 55%),
     radial-gradient(circle at 85% 75%, rgba(255,217,74,.2), transparent 55%),
     linear-gradient(135deg, #1c1670, #0f0c4a);
+  background-size: cover; background-position: center; background-repeat: no-repeat;
 }
+.auth-card__banner--login { background-image: url('/game/auth-banner-login.jpg'); }
+.auth-card__banner--register { background-image: url('/game/auth-banner-register.jpg'); }
 .auth-card__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 20px; }
 .auth-card__tabs { display: flex; align-items: center; gap: 14px; }
 .auth-pill { border: 0; background: none; color: var(--text-secondary); font-weight: 700; font-size: 14px; padding: 9px 4px; cursor: pointer; transition: color .2s; }
@@ -727,14 +728,13 @@ svg { vertical-align: -3px; flex-shrink: 0; }
 }
 @keyframes sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
 .deposit-banner {
-  margin: -20px -22px 18px; padding: 24px 22px 18px; text-align: center; border-bottom: 1px solid var(--border);
+  margin: -20px -22px 18px; aspect-ratio: 1000 / 477; border-bottom: 1px solid var(--border);
   background:
+    url('/game/deposit-banner.jpg') center/cover no-repeat,
     radial-gradient(circle at 15% 20%, rgba(255,217,74,.28), transparent 55%),
     radial-gradient(circle at 85% 85%, rgba(124,232,255,.22), transparent 55%),
     linear-gradient(135deg, #1c1670, #0f0c4a);
 }
-.deposit-banner__eyebrow { display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .6px; color: var(--accent); margin-bottom: 5px; }
-.deposit-banner b { display: block; font-family: 'Baloo 2', sans-serif; font-size: 21px; color: var(--gold); text-shadow: 0 2px 10px rgba(0,0,0,.4); }
 .deposit-card h1 { font-family: 'Baloo 2', sans-serif; font-size: 22px; color: var(--text-primary); margin-bottom: 4px; }
 .deposit-subtitle { color: var(--text-secondary); font-size: 13px; margin-bottom: 20px; }
 .deposit-secure {
@@ -828,15 +828,25 @@ svg { vertical-align: -3px; flex-shrink: 0; }
 }
 .profile-modal h1 { font-family: 'Baloo 2', sans-serif; font-size: 21px; color: var(--text-primary); margin-bottom: 18px; }
 
-/* Placeholder shell for the withdrawal flow — same card chrome as the rest of the site, no
-   content yet beyond the close button. */
+/* Placeholder shell for the withdrawal flow — same card chrome as the rest of the site, a hero
+   banner up top, no functional content yet beyond the close button. */
 .withdraw-modal {
   position: relative; clip-path: var(--cut-lg); overflow: hidden; min-height: min(70dvh, 520px);
-  width: min(100% - 32px, 460px); padding: 28px;
+  width: min(100% - 32px, 460px); padding: 0 28px 28px;
   border: 2px solid #2b2482; background: linear-gradient(160deg, #14105a, #0a0834);
   filter: drop-shadow(0 24px 60px rgba(0,0,0,.4));
   animation: result-card-in .4s cubic-bezier(.2,.9,.3,1.25) both;
 }
+.withdraw-banner {
+  margin: 0 -28px 20px; aspect-ratio: 1000 / 477; border-bottom: 1px solid var(--border);
+  background:
+    url('/game/withdraw-banner.jpg') center/cover no-repeat,
+    radial-gradient(circle at 15% 20%, rgba(124,232,255,.28), transparent 55%),
+    radial-gradient(circle at 85% 85%, rgba(255,217,74,.22), transparent 55%),
+    linear-gradient(135deg, #1c1670, #0f0c4a);
+}
+.withdraw-modal h1 { font-family: 'Baloo 2', sans-serif; font-size: 22px; color: var(--text-primary); margin-bottom: 4px; }
+.withdraw-modal__soon { color: var(--text-secondary); font-size: 13.5px; line-height: 1.5; }
 .profile-modal__section { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--text-secondary); margin: 20px 0 10px; }
 .profile-modal__section:first-of-type { margin-top: 0; }
 .profile-stats { display: grid; gap: 8px; }

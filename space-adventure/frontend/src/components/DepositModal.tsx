@@ -68,10 +68,7 @@ export function DepositModal({ onClose, onUser }: { onClose: () => void; onUser:
     <div className="modal-backdrop modal-backdrop--bottom" role="presentation" onClick={onClose}>
       <section className="deposit-card deposit-card--sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <button type="button" className="modal-close" aria-label="Fechar" onClick={onClose}><Icon name="close" size={16} /></button>
-        <div className="deposit-banner">
-          <span className="deposit-banner__eyebrow">◆ QUANTO MAIOR SEU DEPÓSITO ◆</span>
-          <b>MAIORES SUAS CHANCES</b>
-        </div>
+        <div className="deposit-banner" />
         <h1>Depositar</h1>
         <p className="deposit-subtitle">Via PIX — crédito instantâneo</p>
 
