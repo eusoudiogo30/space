@@ -102,6 +102,9 @@ export function HomePage({
         <img className="landing-float landing-float--3" src="/game/boost.svg" alt="" />
         <img className="landing-float landing-float--4" src="/game/rock-3.svg" alt="" />
         <img className="landing-float landing-float--5" src="/game/coin.svg" alt="" />
+        <img className="landing-float landing-float--6" src="/game/gem-pink.svg" alt="" />
+        <img className="landing-float landing-float--7" src="/game/gem-blue.svg" alt="" />
+        <img className="landing-float landing-float--8" src="/game/gem-gold.svg" alt="" />
         <div className="landing-container landing-hero__inner">
           <span className="online-pill"><i /> {online.toLocaleString('pt-BR')} pilotos online agora</span>
           <h1 className="landing-title">DESVIE E <em>GANHE</em></h1>

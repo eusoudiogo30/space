@@ -103,11 +103,35 @@ svg { vertical-align: -3px; flex-shrink: 0; }
 }
 
 /* ========== HOME ========== */
+/* A proper deep-space scene (nebula glows + a denser, twinkling starfield) instead of the
+   in-game cave backdrop that used to be reused here under a heavy dark overlay — this is the
+   marketing landing page, so it gets to be the most colorful, alive screen in the app. */
 .home-page {
   padding-bottom: calc(20px + env(safe-area-inset-bottom));
-  background: linear-gradient(rgba(6,4,33,.8), rgba(6,4,33,.8)), url('/game/background.png') center/cover no-repeat;
+  background:
+    radial-gradient(1.5px 1.5px at 10% 10%, #fff, transparent 60%),
+    radial-gradient(2px 2px at 82% 6%, rgba(124,232,255,.9), transparent 60%),
+    radial-gradient(1px 1px at 32% 16%, #fff, transparent 60%),
+    radial-gradient(1.5px 1.5px at 60% 4%, rgba(255,217,74,.85), transparent 60%),
+    radial-gradient(2px 2px at 92% 22%, #fff, transparent 60%),
+    radial-gradient(1px 1px at 6% 34%, rgba(255,95,196,.8), transparent 60%),
+    radial-gradient(1.5px 1.5px at 45% 26%, #fff, transparent 60%),
+    radial-gradient(1.5px 1.5px at 75% 40%, rgba(124,232,255,.8), transparent 60%),
+    radial-gradient(1px 1px at 18% 48%, #fff, transparent 60%),
+    radial-gradient(2px 2px at 55% 58%, rgba(255,217,74,.7), transparent 60%),
+    radial-gradient(1.5px 1.5px at 88% 62%, #fff, transparent 60%),
+    radial-gradient(1px 1px at 10% 72%, rgba(124,232,255,.7), transparent 60%),
+    radial-gradient(1.5px 1.5px at 38% 80%, #fff, transparent 60%),
+    radial-gradient(2px 2px at 70% 86%, rgba(255,95,196,.7), transparent 60%),
+    radial-gradient(1px 1px at 95% 92%, #fff, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 18% 6%, rgba(124,232,255,.24), transparent 60%),
+    radial-gradient(ellipse 55% 38% at 88% 14%, rgba(255,217,74,.2), transparent 60%),
+    radial-gradient(ellipse 65% 45% at 12% 60%, rgba(255,95,196,.16), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 90% 78%, rgba(124,232,255,.16), transparent 60%),
+    linear-gradient(165deg, #1a1160 0%, #100c48 32%, #0b0838 60%, #180a3a 100%);
+  background-attachment: fixed;
 }
-.home-page > * { flex-shrink: 0; }
+.home-page > * { flex-shrink: 0; position: relative; }
 
 .lobby-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -320,12 +344,15 @@ svg { vertical-align: -3px; flex-shrink: 0; }
 /* Loosely-scattered game icons drifting behind the hero copy — purely decorative, so they're
    pointer-events:none and hidden on narrow screens where there isn't room for them not to
    collide with the text. */
-.landing-float { position: absolute; z-index: 0; width: 34px; height: 34px; object-fit: contain; opacity: .5; pointer-events: none; animation: drift 5s ease-in-out infinite; filter: drop-shadow(0 4px 10px rgba(0,0,0,.4)); }
+.landing-float { position: absolute; z-index: 0; width: 34px; height: 34px; object-fit: contain; opacity: .68; pointer-events: none; animation: drift 5s ease-in-out infinite; filter: drop-shadow(0 4px 10px rgba(0,0,0,.4)); }
 .landing-float--1 { top: 12%; left: 6%; width: 30px; animation-delay: .2s; }
 .landing-float--2 { top: 60%; left: 10%; width: 26px; animation-delay: 1.1s; }
 .landing-float--3 { top: 18%; right: 8%; width: 38px; animation-delay: .6s; }
 .landing-float--4 { top: 68%; right: 12%; width: 28px; animation-delay: 1.6s; }
 .landing-float--5 { top: 42%; left: 2%; width: 22px; animation-delay: 2.1s; }
+.landing-float--6 { top: 6%; left: 32%; width: 20px; animation-delay: 2.6s; }
+.landing-float--7 { top: 8%; right: 28%; width: 24px; animation-delay: .9s; }
+.landing-float--8 { top: 78%; left: 34%; width: 24px; animation-delay: 1.4s; }
 
 .stats-bar { border-block: 1px solid var(--border); background: rgba(3,2,20,.5); margin: 30px 0; padding: 20px 0; }
 .stats-bar__grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; text-align: center; }
