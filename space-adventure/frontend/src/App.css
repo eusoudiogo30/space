@@ -588,18 +588,16 @@ svg { vertical-align: -3px; flex-shrink: 0; }
 .confetti__piece--round { border-radius: 50%; width: 8px; height: 8px; }
 @keyframes confetti-fall { from { transform: translateY(-10%) rotate(0deg); opacity: 1; } to { transform: translateY(620px) rotate(560deg); opacity: 0; } }
 
-.result-hero { position: relative; z-index: 1; display: grid; place-items: center; margin-bottom: 14px; }
-.result-burst {
-  position: absolute; width: 200px; height: 200px; border-radius: 50%;
-  background:
-    repeating-conic-gradient(from 0deg, rgba(255,217,74,.28) 0deg 6deg, transparent 6deg 18deg),
-    radial-gradient(circle, rgba(255,217,74,.22), transparent 65%);
-  animation: burst-spin 14s linear infinite;
+/* Hero banner art differs by outcome — win (gold ring, coins) vs. loss (cracked asteroid),
+   character baked into the artwork itself, so no separate ship image or CSS burst is layered
+   on top. Same full-bleed band pattern as the other card banners (.auth-card__banner etc). */
+.result-hero {
+  position: relative; z-index: 1; margin: -34px -24px 16px; aspect-ratio: 800 / 519;
+  background-size: cover; background-position: center; background-repeat: no-repeat;
+  border-bottom: 1px solid var(--border);
 }
-@keyframes burst-spin { to { transform: rotate(360deg); } }
-.result-character { position: relative; z-index: 1; font-size: 64px; filter: drop-shadow(0 4px 12px rgba(124,232,255,.3)); }
-.result-character--img { position: relative; width: 86px; height: auto; animation: drift 2.4s ease-in-out infinite; }
-.result-card--win .result-character--img { filter: drop-shadow(0 0 26px rgba(255,217,74,.6)); }
+.result-card--win .result-hero { background-image: url('/game/result-win-bg.jpg'); }
+.result-card--loss .result-hero { background-image: url('/game/result-loss-bg.jpg'); }
 .result-badge { position: relative; z-index: 1; display: inline-block; background: rgba(124,232,255,.15); color: var(--accent); padding: 5px 18px; border-radius: 20px; font-size: 11px; font-weight: 800; letter-spacing: 1.4px; margin-bottom: 14px; }
 .result-badge.result-badge--danger { background: rgba(255,77,106,.15); color: var(--danger); }
 .result-card h2 { position: relative; z-index: 1; font-family: 'Baloo 2', sans-serif; font-size: 23px; font-weight: 800; line-height: 1.25; margin-bottom: 8px; color: var(--text-primary); }
