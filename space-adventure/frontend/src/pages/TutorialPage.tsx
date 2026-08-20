@@ -20,6 +20,10 @@ export function TutorialPage({ onContinue }: { onContinue: (dontShowAgain: boole
             <div><strong>Boost</strong><span>3 segundos invencível a pedras</span></div>
           </li>
           <li>
+            <img src="/game/gem-gold.svg" alt="" />
+            <div><strong>Cometa raro</strong><span>Vale o triplo de uma moeda no seu resgate</span></div>
+          </li>
+          <li>
             <img src="/game/rock-1.svg" alt="" />
             <div><strong>Pedra</strong><span>Encerra o voo — resgate antes de bater!</span></div>
           </li>

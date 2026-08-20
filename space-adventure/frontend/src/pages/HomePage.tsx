@@ -164,6 +164,11 @@ export function HomePage({
               <small>Boost coletado</small>
             </div>
             <div className="rule-tile">
+              <img className="rule-tile__icon" src="/game/gem-gold.svg" alt="" />
+              <strong className="positive">3x multiplicador</strong>
+              <small>Cometa raro</small>
+            </div>
+            <div className="rule-tile">
               <img className="rule-tile__icon" src="/game/rock-1.svg" alt="" />
               <strong className="negative">perde tudo</strong>
               <small>Bateu na pedra</small>
