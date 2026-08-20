@@ -418,7 +418,11 @@ export function GamePage({ stakeAmount, activeRound, config, onFinish, onExit }:
     if (!shipElRef.current) return
     const px = fieldWidthRef.current * x
     const py = fieldHeightRef.current * y
-    shipElRef.current.style.transform = `translate(calc(${px}px - 50%), calc(${py}px - 50%))`
+    // ship.png trails a long exhaust flame below the character, so anchoring at 50% of the
+    // full image height (flame included) visually pushes the body/cockpit above the ship's
+    // actual logical position. Anchor closer to the body's own center (~34% down) instead,
+    // letting the flame trail extend below it — the ship then visually sits where it should.
+    shipElRef.current.style.transform = `translate(calc(${px}px - 50%), calc(${py}px - 34%))`
   }, [])
 
   const measureField = useCallback(() => {

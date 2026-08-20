@@ -561,7 +561,11 @@ svg { vertical-align: -3px; flex-shrink: 0; }
 .sky-object--dodged, .sky-object--missed { animation: sky-fade-out .4s ease-out forwards !important; }
 
 .ship-art-wrap { position: absolute; left: 0; top: 0; z-index: 2; will-change: transform; filter: drop-shadow(0 6px 10px rgba(0,0,0,.5)); }
-.ship-art { width: clamp(40px, 12vw, 52px); height: auto; display: block; pointer-events: none; -webkit-user-drag: none; user-drag: none; }
+.ship-art { width: clamp(40px, 12vw, 52px); height: auto; display: block; pointer-events: none; -webkit-user-drag: none; user-drag: none; animation: ship-flame-flicker 1.1s ease-in-out infinite; }
+@keyframes ship-flame-flicker {
+  0%, 100% { filter: drop-shadow(0 6px 10px rgba(124,232,255,.35)) brightness(1); }
+  50% { filter: drop-shadow(0 10px 16px rgba(124,232,255,.65)) brightness(1.08); }
+}
 .ship-art-wrap--boosted { filter: drop-shadow(0 0 18px rgba(124,232,255,.9)); animation: pulse .5s ease-in-out infinite; }
 
 .cashout-row { display: flex; gap: 8px; margin: 0 16px calc(10px + env(safe-area-inset-bottom)); }
@@ -599,15 +603,18 @@ svg { vertical-align: -3px; flex-shrink: 0; }
 .result-page { display: flex; align-items: center; justify-content: center; padding: 20px 16px; }
 .result-card {
   position: relative; clip-path: var(--cut-lg); text-align: center; overflow: hidden;
-  --result-pad-x: 24px; --result-pad-top: 34px;
-  padding: var(--result-pad-top) var(--result-pad-x) 28px; max-width: 380px; width: 100%;
-  background: linear-gradient(165deg, #1a1566 0%, #100c4a 55%, #0a0834 100%);
-  border: 2px solid #2b2482;
+  padding: calc(65% - 20px) 24px 28px; max-width: 380px; width: 100%;
+  background-color: #0a0834; background-size: 100% auto; background-position: top center; background-repeat: no-repeat;
   filter: drop-shadow(0 30px 70px rgba(0,0,0,.55));
   animation: result-card-in .5s cubic-bezier(.2,.9,.25,1.35) both;
 }
-.result-card--win { border-color: rgba(255,217,74,.6); box-shadow: inset 0 0 0 1px rgba(255,217,74,.22); }
-.result-card--loss { border-color: rgba(255,77,106,.35); }
+/* The artwork (win: gold ring + coins, loss: cracked asteroid) is the card itself — it already
+   carries its own cut-corner gold/pink border and dark space background baked in, so the card
+   has no separate frame of its own. Its native aspect (800/519 = ~65% of width) sets how far
+   down the character extends; content padding-top matches that so text starts in the plain-
+   space area below the character rather than overlapping it. */
+.result-card--win { background-image: url('/game/result-win-bg.jpg'); }
+.result-card--loss { background-image: url('/game/result-loss-bg.jpg'); }
 .result-free-badge { position: relative; z-index: 1; display: inline-block; margin-bottom: 12px; padding: 5px 16px; border: 1px solid rgba(255,217,74,.4); border-radius: 20px; background: rgba(255,217,74,.12); color: var(--gold); font-size: 10px; font-weight: 800; letter-spacing: 1.4px; }
 @keyframes result-card-in { from { opacity: 0; transform: scale(.88) translateY(18px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 
@@ -616,17 +623,6 @@ svg { vertical-align: -3px; flex-shrink: 0; }
 .confetti__piece--round { border-radius: 50%; width: 8px; height: 8px; }
 @keyframes confetti-fall { from { transform: translateY(-10%) rotate(0deg); opacity: 1; } to { transform: translateY(620px) rotate(560deg); opacity: 0; } }
 
-/* Hero banner art differs by outcome — win (gold ring, coins) vs. loss (cracked asteroid),
-   character baked into the artwork itself, so no separate ship image or CSS burst is layered
-   on top. Same full-bleed band pattern as the other card banners (.auth-card__banner etc). */
-.result-hero {
-  position: relative; z-index: 1; aspect-ratio: 800 / 519;
-  margin: calc(-1 * var(--result-pad-top)) calc(-1 * var(--result-pad-x)) 16px;
-  background-size: cover; background-position: center; background-repeat: no-repeat;
-  border-bottom: 1px solid var(--border);
-}
-.result-card--win .result-hero { background-image: url('/game/result-win-bg.jpg'); }
-.result-card--loss .result-hero { background-image: url('/game/result-loss-bg.jpg'); }
 .result-badge { position: relative; z-index: 1; display: inline-block; background: rgba(124,232,255,.15); color: var(--accent); padding: 5px 18px; border-radius: 20px; font-size: 11px; font-weight: 800; letter-spacing: 1.4px; margin-bottom: 14px; }
 .result-badge.result-badge--danger { background: rgba(255,77,106,.15); color: var(--danger); }
 .result-card h2 { position: relative; z-index: 1; font-family: 'Baloo 2', sans-serif; font-size: 23px; font-weight: 800; line-height: 1.25; margin-bottom: 8px; color: var(--text-primary); }
