@@ -13,6 +13,32 @@ type ToneOptions = {
 
 export type AudioEngine = ReturnType<typeof createAudioEngine>
 
+// Mobile browsers only allow an AudioContext to start while handling a real user gesture.
+// Keep one context for the whole app so the tap on "Jogar" can unlock it before the loading
+// screen and the game can safely reuse the already-authorized context a moment later.
+let sharedContext: AudioContext | null = null
+
+function getAudioContext(): AudioContext {
+  if (!sharedContext) {
+    const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    sharedContext = new Ctor()
+  }
+  return sharedContext
+}
+
+export async function unlockMobileAudio() {
+  const ac = getAudioContext()
+  if (ac.state === 'suspended') await ac.resume()
+
+  // A one-frame silent source makes the unlock reliable on older iOS Safari versions without
+  // producing an audible click. This cannot override the device's physical silent switch — a
+  // web page has no permission to do that — but it does remove browser autoplay blocking.
+  const source = ac.createBufferSource()
+  source.buffer = ac.createBuffer(1, 1, ac.sampleRate)
+  source.connect(ac.destination)
+  source.start()
+}
+
 export function createAudioEngine() {
   let ctx: AudioContext | null = null
   let muted = false
@@ -23,10 +49,7 @@ export function createAudioEngine() {
   const MUSIC_VOLUME = 0.05
 
   function ensureContext(): AudioContext {
-    if (!ctx) {
-      const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-      ctx = new Ctor()
-    }
+    if (!ctx) ctx = getAudioContext()
     if (ctx.state === 'suspended') void ctx.resume()
     return ctx
   }

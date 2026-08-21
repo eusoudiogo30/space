@@ -97,7 +97,7 @@ export function DepositModal({ onClose, onUser }: { onClose: () => void; onUser:
                 <button
                   key={value}
                   type="button"
-                  className={`deposit-option ${!customAmount && amount === value ? 'selected' : ''}`}
+                  className={`deposit-option ${value === POPULAR_AMOUNT ? 'deposit-option--popular' : ''} ${value === RECOMMENDED_AMOUNT ? 'deposit-option--recommended' : ''} ${!customAmount && amount === value ? 'selected' : ''}`}
                   onClick={() => { setAmount(value); setCustomAmount('') }}
                 >
                   {value === POPULAR_AMOUNT && <em>Popular</em>}
@@ -118,7 +118,7 @@ export function DepositModal({ onClose, onUser }: { onClose: () => void; onUser:
             )}
             {error && <p className="form-error" role="alert">{error}</p>}
             <button type="button" className="primary-button deposit-cta" disabled={loading} onClick={() => void generate()}>
-              <Icon name="card-id" size={16} />{loading ? 'Gerando…' : 'Gerar QR Code PIX'}
+              {loading ? 'Gerando…' : 'Gerar QR Code PIX'}
             </button>
           </>
         )}

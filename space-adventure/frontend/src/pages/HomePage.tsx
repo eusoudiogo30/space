@@ -25,7 +25,7 @@ const DEFAULT_BETS = [5, 10, 20, 50, 100, 200, 250]
 
 const HOW_IT_WORKS = [
   { icon: '/game/coin.svg', title: '1. Faça sua entrada', text: 'Escolha o valor da aposta a partir de R$ 5 e entre na partida. Sem burocracia.' },
-  { icon: '/game/boost.svg', title: '2. Desvie e colete', text: 'Pilote pela galáxia: cada moeda coletada soma no multiplicador. Boost acelera tudo.' },
+  { icon: '/game/boost.svg', title: '2. Desvie e colete', text: 'Arraste a nave, colete moedas para aumentar o prêmio e use o boost para atravessar perigos.' },
   { icon: '/game/rock-1.svg', title: '3. Pouse e resgate via PIX', text: 'O risco sobe a cada trecho — pouse antes de bater e o valor cai direto no seu saldo.' },
 ]
 
@@ -55,6 +55,9 @@ export function HomePage({
   const bets = (config?.suggestedBets ?? DEFAULT_BETS).map(Number).filter((v) => v > 0)
   const insufficientBalance = Boolean(user && selectedBet !== null && selectedBet * 100 > balance)
   const online = useOnlineCounter()
+  const freePlayEnabled = config?.freePlayEnabled ?? true
+  const boostSeconds = Number(((config?.boostDurationMs ?? 3000) / 1000).toFixed(1)).toLocaleString('pt-BR')
+  const cometValue = Math.max(1, Math.trunc(config?.gemComboValue ?? 3))
   const betCardRef = useRef<HTMLElement>(null)
 
   const scrollToBet = () => betCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -68,13 +71,13 @@ export function HomePage({
         <div className="lobby-actions">
           {user ? (
             <>
-              <button className="balance-display balance-display--button" onClick={() => setMenuOpen(true)}>
+              <div className="balance-display" aria-label="Saldo disponível">
                 <span className="balance-icon">R$</span>
                 <strong>{(balance / 100).toFixed(2).replace('.', ',')}</strong>
-                <Icon name="chevron-down" size={13} />
+              </div>
+              <button className="wallet-button" onClick={onOpenDeposit} aria-label="Depositar" title="Depositar">
+                <Icon name="wallet" size={17} />
               </button>
-              <button className="header-action header-action--deposit" onClick={onOpenDeposit}><Icon name="wallet" size={15} /> <span>Depositar</span></button>
-              <button className="header-action header-action--withdraw" onClick={onOpenWithdraw}><Icon name="cashout" size={15} /> <span>Sacar</span></button>
               <button className="pill-button pill-button--avatar" onClick={() => setMenuOpen(true)}>{(user.username || user.name?.trim() || '?').slice(0, 1).toUpperCase()}</button>
               {menuOpen && (
                 <ProfileMenu
@@ -104,7 +107,6 @@ export function HomePage({
         <img className="landing-float landing-float--5" src="/game/coin.svg" alt="" />
         <img className="landing-float landing-float--6" src="/game/gem-pink.svg" alt="" />
         <img className="landing-float landing-float--7" src="/game/gem-blue.svg" alt="" />
-        <img className="landing-float landing-float--8" src="/game/gem-gold.svg" alt="" />
         <div className="landing-container landing-hero__inner">
           <span className="online-pill"><i /> {online.toLocaleString('pt-BR')} pilotos online agora</span>
           <h1 className="landing-title">DESVIE E <em>GANHE</em></h1>
@@ -115,14 +117,15 @@ export function HomePage({
           {!user && (
             <>
               <button className="landing-link" onClick={onLogin}>Já tenho conta →</button>
-              <button className="free-play-button landing-cta" onClick={onFreePlay}><span className="free-play-button__icon">▶</span> JOGAR GRÁTIS</button>
+              <button className="free-play-button landing-cta" onClick={onFreePlay} disabled={!freePlayEnabled}><span className="free-play-button__icon">▶</span> {freePlayEnabled ? 'JOGAR GRÁTIS' : 'JOGO GRÁTIS INDISPONÍVEL'}</button>
+              {message && <p className="lobby-message" role="alert">{message}</p>}
+              <div className="trust-row">
+                <span><Icon name="check" size={13} /> Saque via PIX</span>
+                <span><Icon name="check" size={13} /> Jogue grátis</span>
+                <span><Icon name="check" size={13} /> Resultado na hora</span>
+              </div>
             </>
           )}
-          <div className="trust-row">
-            <span><Icon name="check" size={13} /> Saque via PIX</span>
-            <span><Icon name="check" size={13} /> Jogue grátis</span>
-            <span><Icon name="check" size={13} /> Resultado na hora</span>
-          </div>
         </div>
       </section>
 
@@ -154,27 +157,45 @@ export function HomePage({
       )}
 
       {!user && (
-        <section className="rules-section">
+        <section className="landing-container landing-section game-guide">
+          <h2 className="landing-heading">O que aparece no caminho</h2>
+          <p className="landing-heading-sub">Reconheça cada item antes de decolar e saiba exatamente o que ele faz.</p>
           <div className="rules-grid">
             <div className="rule-tile">
-              <img className="rule-tile__icon" src="/game/coin.svg" alt="" />
-              <strong className="positive">+multiplicador</strong>
-              <small>Moeda coletada</small>
+              <div className="rule-tile__art">
+                <img className="rule-tile__icon" src="/game/coin.svg" alt="Moeda dourada" />
+              </div>
+              <span className="rule-tile__tag rule-tile__tag--positive">COLETE</span>
+              <h3>Moeda</h3>
+              <p>Cada moeda aumenta seu multiplicador e faz o prêmio acumulado crescer.</p>
             </div>
             <div className="rule-tile">
-              <img className="rule-tile__icon" src="/game/boost.svg" alt="" />
-              <strong className="positive">3s invencível</strong>
-              <small>Boost coletado</small>
+              <div className="rule-tile__art">
+                <img className="rule-tile__icon rule-tile__icon--boost" src="/game/boost.svg" alt="Boost de energia" />
+              </div>
+              <span className="rule-tile__tag rule-tile__tag--boost">PROTEÇÃO</span>
+              <h3>Boost</h3>
+              <p>Deixa sua nave invencível por {boostSeconds} segundos. Durante esse tempo, pedras não encerram o voo.</p>
             </div>
             <div className="rule-tile">
-              <img className="rule-tile__icon" src="/game/gem-gold.svg" alt="" />
-              <strong className="positive">3x multiplicador</strong>
-              <small>Cometa raro</small>
+              <div className="rule-tile__art rule-tile__art--group" aria-label="Cometas raros dourado, azul e rosa">
+                <img className="rule-tile__icon" src="/game/gem-gold.svg" alt="" />
+                <img className="rule-tile__icon" src="/game/gem-blue.svg" alt="" />
+                <img className="rule-tile__icon" src="/game/gem-pink.svg" alt="" />
+              </div>
+              <span className="rule-tile__tag rule-tile__tag--rare">RARO</span>
+              <h3>Cometa raro</h3>
+              <p>Pode aparecer em cores diferentes e vale {cometValue} {cometValue === 1 ? 'moeda' : 'moedas'} de uma vez no seu prêmio.</p>
             </div>
             <div className="rule-tile">
-              <img className="rule-tile__icon" src="/game/rock-1.svg" alt="" />
-              <strong className="negative">perde tudo</strong>
-              <small>Bateu na pedra</small>
+              <div className="rule-tile__art rule-tile__art--group" aria-label="Diferentes planetas e pedras perigosas">
+                <img className="rule-tile__icon" src="/game/rock-1.svg" alt="" />
+                <img className="rule-tile__icon" src="/game/rock-2.svg" alt="" />
+                <img className="rule-tile__icon" src="/game/rock-3.svg" alt="" />
+              </div>
+              <span className="rule-tile__tag rule-tile__tag--danger">DESVIE</span>
+              <h3>Planetas e pedras</h3>
+              <p>Todos são obstáculos. Sem um boost ativo, a colisão encerra o voo e você perde o valor não retirado.</p>
             </div>
           </div>
         </section>
@@ -191,7 +212,7 @@ export function HomePage({
               <div><h2><img className="bet-head__icon" src="/game/coin.svg" alt="" /> INICIAR VOO</h2><p>Escolha sua entrada e tente pousar com o maior multiplicador!</p></div>
             </div>
 
-            <div className="bet-label"><span>ENTRADA</span></div>
+            <div className="bet-label"><span>VALOR DE ENTRADA</span></div>
             <div className="bet-grid">
               {bets.map((value) => (
                 <button
@@ -256,7 +277,7 @@ export function HomePage({
             <h2>🚀 Pronto para decolar?</h2>
             <p>Jogue grátis e aprenda na prática. Quando estiver pronto, crie a conta, jogue valendo e receba via PIX.</p>
             <div className="final-cta__actions">
-              <button className="free-play-button" onClick={onFreePlay}><span className="free-play-button__icon">▶</span> JOGAR GRÁTIS</button>
+              <button className="free-play-button" onClick={onFreePlay} disabled={!freePlayEnabled}><span className="free-play-button__icon">▶</span> {freePlayEnabled ? 'JOGAR GRÁTIS' : 'JOGO GRÁTIS INDISPONÍVEL'}</button>
               <button className="primary-button final-cta__secondary" onClick={onRegister}>CRIAR CONTA</button>
             </div>
             <p className="guest-note">
@@ -307,7 +328,6 @@ export function HomePage({
                 <span className="mobile-bottom-nav__ring" />
                 <Icon name="rocket" size={22} />
               </span>
-              <small>Jogar</small>
             </button>
             <button onClick={onOpenReferral}><Icon name="chest" size={19} /><small>Baús</small></button>
             <button onClick={onOpenProfile}><Icon name="user" size={19} /><small>Perfil</small></button>
@@ -316,7 +336,9 @@ export function HomePage({
           <>
             <button onClick={onRegister}><Icon name="wallet" size={19} /><small>Depositar</small></button>
             <button onClick={onRegister}><Icon name="cashout" size={19} /><small>Sacar</small></button>
-            <button className="mobile-bottom-nav__main" onClick={onFreePlay} aria-label="Jogar grátis"><span className="mobile-bottom-nav__ring" /><Icon name="rocket" size={24} /></button>
+            <button className="mobile-bottom-nav__main-wrap" onClick={onFreePlay} aria-label="Jogar grátis" disabled={!freePlayEnabled}>
+              <span className="mobile-bottom-nav__main"><span className="mobile-bottom-nav__ring" /><Icon name="rocket" size={24} /></span>
+            </button>
             <button onClick={onRegister}><Icon name="card-id" size={19} /><small>Registrar</small></button>
             <button onClick={onLogin}><Icon name="user" size={19} /><small>Entrar</small></button>
           </>

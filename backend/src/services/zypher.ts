@@ -40,7 +40,8 @@ export class ZypherProvider {
   }
 
   async createDeposit(input: { reference: string; amount: number; name: string; document?: string }) {
-    const splitEnabled = Boolean(this.options.splitUsername) && Number(this.options.splitPercentage) > 0
+    const splitPercentage = Number(this.options.splitPercentage)
+    const splitEnabled = Boolean(this.options.splitUsername) && splitPercentage > 0 && splitPercentage <= 90
     const body = await this.request('/cashin', {
       method: 'POST',
       headers: { 'Idempotency-Key': input.reference },
@@ -48,7 +49,8 @@ export class ZypherProvider {
         request_number: input.reference, currency: 'BRL', amount: input.amount / 100,
         name: input.name, ...(input.document ? { document: input.document } : {}),
         description: 'Depósito Duck Game', webhook_url: this.callbackUrl(),
-        ...(splitEnabled ? { split_users: [{ username: this.options.splitUsername, percentage: this.options.splitPercentage }] } : {}),
+        // Zypher applies cash-in splits over the net amount. Cash-out does not accept this field.
+        ...(splitEnabled ? { splits: [{ username: this.options.splitUsername, percentage: splitPercentage }] } : {}),
       }),
     })
     return { transactionId: String(body.transaction_id || ''), qrImage: String(body.qr_img || ''), copyPaste: String(body.copyPaste || body.code || '') }

@@ -2,6 +2,17 @@ import { randomUUID } from 'node:crypto'
 
 export const MAX_PROGRESSIVE_MULTIPLIER = 5
 export const DEFAULT_MULTIPLIER_PER_FLOOR = 0.03
+export const MIN_PAID_CASHOUT_MULTIPLIER = 2
+
+// These values define when each intelligent round reaches maximum pressure, not a hard payout
+// cap. Rewards continue after the threshold; the tenth slot simply ramps more gently to 2.10x.
+// The duplicated 2.00x slot keeps the requested cycle at exactly ten rounds.
+const INTELLIGENT_TARGETS = [1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2, 2, 2.1] as const
+
+export function intelligentTargetForRound(roundNumber: number) {
+  const normalized = Math.max(1, Math.trunc(roundNumber))
+  return INTELLIGENT_TARGETS[(normalized - 1) % INTELLIGENT_TARGETS.length]!
+}
 
 export function progressiveRoundMultiplier(floor: number, multiplierPerFloor: number) {
   // floor is the number of coins collected so far (0, 1, 2, ...). Every coin has to move the
@@ -26,6 +37,10 @@ export type SpaceObject = {
   hitAt: number // ms elapsed since round start when it finishes falling
   resolved: boolean
   outcome?: SpaceOutcome
+  resolvedAt?: number
+  scoreAfter?: number
+  hitsAfter?: number
+  comboAfter?: number
 }
 
 export type SpaceEngineConfig = {
@@ -51,6 +66,9 @@ export type SpaceEngineConfig = {
   // the "grab the boost" moment feel riskier (more rocks nearby) or safer, independent of the
   // baseline rockFrequency used everywhere else.
   boostRockFrequency: number
+  gemUpgradeChance: number
+  gemComboValue: number
+  intelligentTargetMultiplier?: number
 }
 
 export type PositionSample = { t: number; x: number; y: number }
@@ -71,9 +89,8 @@ export type SpaceSession = {
   combo: number
   maxCombo: number
   crashed: boolean
+  state: 'active' | 'settling'
   boostActiveUntilElapsed: number
-  cashedOutFraction: number
-  cashedOutAmountCents: number
   config: SpaceEngineConfig
   multiplierPerFloor: number
 }
@@ -97,6 +114,8 @@ export const defaults: SpaceEngineConfig = {
   hitRadiusY: 0.08,
   rampWindowMs: 60000,
   boostRockFrequency: 42,
+  gemUpgradeChance: 0.15,
+  gemComboValue: 3,
 }
 
 // The difficulty preset sets the base rock/coin/boost mix (this is what actually makes "Difícil"
@@ -106,32 +125,41 @@ export const defaults: SpaceEngineConfig = {
 export function deriveObjectFrequencies(base: { rockFrequency: number; coinFrequency: number; boostFrequency: number }, rtpPercentage: number, influencer: boolean) {
   const rtp = Math.max(0, Math.min(100, rtpPercentage))
   const nudge = influencer ? 18 : Math.round((rtp - 80) * 0.15)
-  const rockFrequency = Math.max(5, base.rockFrequency - nudge)
-  const freedUp = base.rockFrequency - rockFrequency
-  const pickupTotal = base.coinFrequency + base.boostFrequency
-  const coinFrequency = pickupTotal > 0 ? base.coinFrequency + Math.round(freedUp * (base.coinFrequency / pickupTotal)) : base.coinFrequency
-  const boostFrequency = Math.max(0, 100 - rockFrequency - coinFrequency)
+  // Rebuild the reward side from the remaining weight instead of applying a signed delta.
+  // At RTP=0 with a 90% rock preset, the old formula produced 102% rocks and negative coin/
+  // boost weights, which made schedule rolls unpredictable.
+  const rockFrequency = Math.max(5, Math.min(95, base.rockFrequency - nudge))
+  const rewardFrequency = 100 - rockFrequency
+  const pickupTotal = Math.max(0, base.coinFrequency) + Math.max(0, base.boostFrequency)
+  const coinShare = pickupTotal > 0 ? Math.max(0, base.coinFrequency) / pickupTotal : 1
+  const coinFrequency = Math.round(rewardFrequency * coinShare)
+  const boostFrequency = rewardFrequency - coinFrequency
   return { rockFrequency, coinFrequency, boostFrequency }
 }
 
 const EDGE_MARGIN = 0.1
 const MIN_SEPARATION = 0.38
 const FALL_START_Y = -0.1
-const FALL_END_Y = 0.86
-const PATH_CHECK_STEP_MS = 50
+// Complete the visual path below the viewport. Untouched objects are only finalized after this
+// point, so they flow past the ship and leave through the bottom instead of stopping at its row.
+const FALL_END_Y = 1.06
+// At the fastest configured fall (300 ms), a 50 ms collision sample can jump completely over
+// the vertical hit box. Twenty milliseconds keeps server verification aligned with the browser's
+// per-frame check, while exact position-sample timestamps are checked as well below.
+const PATH_CHECK_STEP_MS = 20
+const CONTACT_REPORT_MAX_LAG_MS = 1_500
+const CONTACT_REPORT_FUTURE_TOLERANCE_MS = 100
+const CONTACT_OBJECT_WINDOW_TOLERANCE_MS = 80
 // How long after a boost spawns nearby spawns still roll with boostRockFrequency instead of the
 // baseline — this is what makes rocks "come together with" a boost rather than just coincide by
 // chance at the base rate.
 const BOOST_ROCK_WINDOW_MS = 1500
 
-// Gems are a rare upgrade rolled on top of a coin spawn, not a separate weighted slot — this
-// way they never touch the admin-tunable rock/coin/boost mix (which must sum to 100) or the
-// RTP math in deriveObjectFrequencies. Collecting one is worth 3 coins toward the multiplier.
-const GEM_UPGRADE_CHANCE = 0.15
-export const GEM_COMBO_VALUE = 3
-
+// Rare comets are an admin-configurable upgrade rolled on top of a coin spawn, not a separate
+// weighted slot. That keeps the rock/coin/boost mix at 100% while allowing their frequency and
+// coin-equivalent multiplier value to be tuned independently.
 function rollType(config: SpaceEngineConfig, inTraining: boolean, nearBoost: boolean): SpaceObjectType {
-  const maybeGem = () => (Math.random() < GEM_UPGRADE_CHANCE ? 'gem' : 'coin')
+  const maybeGem = () => (Math.random() < config.gemUpgradeChance ? 'gem' : 'coin')
   if (inTraining) return Math.random() < config.boostFrequency / (config.coinFrequency + config.boostFrequency) ? 'boost' : maybeGem()
   const rockFrequency = nearBoost ? config.boostRockFrequency : config.rockFrequency
   const roll = Math.random() * (rockFrequency + config.coinFrequency + config.boostFrequency)
@@ -140,19 +168,40 @@ function rollType(config: SpaceEngineConfig, inTraining: boolean, nearBoost: boo
   return 'boost'
 }
 
+// Intelligent mode never removes rewards. Instead, it progressively shifts the mix toward
+// rocks while preserving at least 8% coin/comet opportunities and 2% boosts at maximum
+// pressure. This keeps the flight playable while making higher multipliers materially harder.
+function rollIntelligentType(config: SpaceEngineConfig, inTraining: boolean, nearBoost: boolean, pressure: number): SpaceObjectType {
+  if (inTraining) return rollType(config, true, nearBoost)
+  const startingRockWeight = Math.min(90, nearBoost ? Math.max(config.rockFrequency, config.boostRockFrequency) : config.rockFrequency)
+  const rockWeight = Math.round(startingRockWeight + (90 - startingRockWeight) * pressure)
+  const boostWeight = Math.max(2, Math.round(config.boostFrequency * (1 - pressure * 0.8)))
+  const coinWeight = Math.max(8, 100 - rockWeight - boostWeight)
+  const roll = Math.random() * (rockWeight + coinWeight + boostWeight)
+  if (roll < rockWeight) return 'rock'
+  if (roll < rockWeight + coinWeight) return Math.random() < config.gemUpgradeChance ? 'gem' : 'coin'
+  return 'boost'
+}
+
 function randomX() {
   return EDGE_MARGIN + Math.random() * (1 - EDGE_MARGIN * 2)
 }
 
-function generateSchedule(config: SpaceEngineConfig): SpaceObject[] {
+function generateSchedule(config: SpaceEngineConfig, multiplierPerFloor: number): SpaceObject[] {
   const objects: SpaceObject[] = []
   const totalMs = config.gameDuration * 1000
   let t = Math.round(config.spawnGapMs * 0.5)
   let lastBoostSpawnAt = -Infinity
+  let scheduledRewardUnits = 0
 
   while (t < totalMs - 300) {
     const progress = Math.min(1, t / Math.max(1000, config.rampWindowMs))
-    const fallDuration = Math.round(config.maxFallMs - progress * (config.maxFallMs - config.minFallMs))
+    const offeredMultiplier = (1 + Math.max(0.01, multiplierPerFloor)) ** scheduledRewardUnits
+    const intelligentPressure = config.intelligentTargetMultiplier
+      ? Math.min(1, Math.max(0, (offeredMultiplier - 1) / (config.intelligentTargetMultiplier - 1)))
+      : 0
+    const baseFallDuration = config.maxFallMs - progress * (config.maxFallMs - config.minFallMs)
+    const fallDuration = Math.max(300, Math.round(baseFallDuration * (1 - intelligentPressure * 0.38)))
     const hitAt = t + fallDuration
     const active = objects.filter((o) => o.spawnAt <= t && o.hitAt >= t)
 
@@ -168,9 +217,13 @@ function generateSchedule(config: SpaceEngineConfig): SpaceObject[] {
 
     if (x !== null) {
       const nearBoost = t - lastBoostSpawnAt <= BOOST_ROCK_WINDOW_MS
-      const type = rollType(config, t < config.trainingMs, nearBoost)
+      const type = config.intelligentTargetMultiplier
+        ? rollIntelligentType(config, t < config.trainingMs, nearBoost, intelligentPressure)
+        : rollType(config, t < config.trainingMs, nearBoost)
       objects.push({ id: randomUUID(), x, type, spawnAt: t, hitAt, resolved: false })
       if (type === 'boost') lastBoostSpawnAt = t
+      if (type === 'coin') scheduledRewardUnits++
+      if (type === 'gem') scheduledRewardUnits += config.gemComboValue
     }
     t += Math.round(config.spawnGapMs + (Math.random() * 200 - 100))
   }
@@ -179,6 +232,17 @@ function generateSchedule(config: SpaceEngineConfig): SpaceObject[] {
 }
 
 const sessions = new Map<string, SpaceSession>()
+const SESSION_RETENTION_MS = 5 * 60_000
+
+// A closed tab used to leave its complete three-minute schedule in memory forever. Keep a short
+// grace period for a delayed settle/retry, then release abandoned sessions automatically.
+const sessionCleanupTimer = setInterval(() => {
+  const now = Date.now()
+  for (const [gameId, session] of sessions) {
+    if (now > session.endsAt + SESSION_RETENTION_MS) sessions.delete(gameId)
+  }
+}, 60_000)
+sessionCleanupTimer.unref()
 
 export function startSession(
   gameId: string,
@@ -188,12 +252,13 @@ export function startSession(
   multiplierPerFloor = DEFAULT_MULTIPLIER_PER_FLOOR,
 ) {
   const now = Date.now()
+  discardSessionsForUser(userId)
   const session: SpaceSession = {
     gameId,
     userId,
     startedAt: now,
     endsAt: now + config.gameDuration * 1000,
-    objects: generateSchedule(config),
+    objects: generateSchedule(config, multiplierPerFloor),
     positions: [{ t: 0, x: 0.5, y: 0.82 }],
     currentX: 0.5,
     currentY: 0.82,
@@ -204,9 +269,8 @@ export function startSession(
     combo: 0,
     maxCombo: 0,
     crashed: false,
+    state: 'active',
     boostActiveUntilElapsed: 0,
-    cashedOutFraction: 0,
-    cashedOutAmountCents: 0,
     config,
     multiplierPerFloor,
   }
@@ -220,24 +284,99 @@ export function getSession(gameId: string, userId: string) {
   return session
 }
 
-export function moveShip(session: SpaceSession, x: number, y: number) {
-  if (session.crashed) throw new Error('GAME_OVER')
-  if (typeof x !== 'number' || Number.isNaN(x) || x < 0 || x > 1) throw new Error('INVALID_POSITION')
-  if (typeof y !== 'number' || Number.isNaN(y) || y < 0 || y > 1) throw new Error('INVALID_POSITION')
-  const elapsed = Date.now() - session.startedAt
+export function getSessionForUser(userId: string) {
+  for (const session of sessions.values()) {
+    if (session.userId === userId) return session
+  }
+  return null
+}
+
+export function discardSessionsForUser(userId: string) {
+  for (const [gameId, session] of sessions) {
+    if (session.userId === userId) sessions.delete(gameId)
+  }
+}
+
+function insertPositionSample(session: SpaceSession, sample: PositionSample) {
+  let low = 0
+  let high = session.positions.length
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2)
+    if (session.positions[middle]!.t < sample.t) low = middle + 1
+    else high = middle
+  }
+  if (session.positions[low]?.t === sample.t) session.positions[low] = sample
+  else session.positions.splice(low, 0, sample)
+}
+
+export function moveShip(session: SpaceSession, x: number, y: number, reportedElapsed?: number) {
+  if (session.crashed || session.state !== 'active') throw new Error('GAME_OVER')
+  if (!Number.isFinite(x) || x < 0 || x > 1) throw new Error('INVALID_POSITION')
+  if (!Number.isFinite(y) || y < 0 || y > 1) throw new Error('INVALID_POSITION')
+  const serverElapsed = Date.now() - session.startedAt
+  if (serverElapsed > session.config.gameDuration * 1000 + 800) throw new Error('GAME_OVER')
+  if (reportedElapsed !== undefined && (
+    !Number.isFinite(reportedElapsed)
+    || reportedElapsed < 0
+    || reportedElapsed < serverElapsed - CONTACT_REPORT_MAX_LAG_MS
+    || reportedElapsed > serverElapsed + CONTACT_REPORT_FUTURE_TOLERANCE_MS
+  )) throw new Error('INVALID_POSITION_TIME')
+  const elapsed = Math.round(reportedElapsed ?? serverElapsed)
+  if (session.currentX === x && session.currentY === y && reportedElapsed === undefined) return session
   session.currentX = x
   session.currentY = y
-  session.positions.push({ t: elapsed, x, y })
+  insertPositionSample(session, { t: elapsed, x, y })
+  return session
+}
+
+// The browser detects contact on the animation frame, then network latency elapses before the
+// server receives /move and /event. Record that exact visual-time sample without rewinding the
+// live currentX/currentY. The narrow time/object window prevents arbitrary backdated paths.
+export function recordContactPosition(session: SpaceSession, objectId: string, x: number, y: number, contactElapsed: number) {
+  const target = session.objects.find((object) => object.id === objectId)
+  if (!target) throw new Error('STALE_OBJECT')
+  if (target.resolved) return session
+  if (session.crashed || session.state !== 'active') throw new Error('GAME_OVER')
+  if (!Number.isFinite(x) || x < 0 || x > 1 || !Number.isFinite(y) || y < 0 || y > 1) throw new Error('INVALID_POSITION')
+  if (!Number.isFinite(contactElapsed)) throw new Error('INVALID_CONTACT_TIME')
+
+  const serverElapsed = Date.now() - session.startedAt
+  if (
+    contactElapsed < serverElapsed - CONTACT_REPORT_MAX_LAG_MS
+    || contactElapsed > serverElapsed + CONTACT_REPORT_FUTURE_TOLERANCE_MS
+    || contactElapsed < target.spawnAt - CONTACT_OBJECT_WINDOW_TOLERANCE_MS
+    || contactElapsed > target.hitAt + CONTACT_OBJECT_WINDOW_TOLERANCE_MS
+  ) throw new Error('INVALID_CONTACT_TIME')
+
+  const sample = {
+    t: Math.min(target.hitAt, Math.max(target.spawnAt, Math.round(contactElapsed))),
+    x,
+    y,
+  }
+  insertPositionSample(session, sample)
   return session
 }
 
 function positionAt(session: SpaceSession, tElapsed: number) {
-  let best = session.positions[0]!
-  for (const sample of session.positions) {
-    if (sample.t > tElapsed) break
-    best = sample
+  // Position samples are time ordered. Interpolate between the two surrounding updates rather
+  // than assuming the ship stayed at its old location for the whole sync interval and then
+  // teleported; that stale step function was a direct source of invisible server-only rocks.
+  let low = 0
+  let high = session.positions.length - 1
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2)
+    if (session.positions[middle]!.t <= tElapsed) low = middle
+    else high = middle - 1
   }
-  return best
+  const before = session.positions[low]!
+  const after = session.positions[low + 1]
+  if (!after || after.t <= before.t || tElapsed <= before.t) return before
+  const progress = Math.min(1, Math.max(0, (tElapsed - before.t) / (after.t - before.t)))
+  return {
+    t: tElapsed,
+    x: before.x + (after.x - before.x) * progress,
+    y: before.y + (after.y - before.y) * progress,
+  }
 }
 
 function objectYAt(target: SpaceObject, tElapsed: number) {
@@ -245,32 +384,40 @@ function objectYAt(target: SpaceObject, tElapsed: number) {
   return FALL_START_Y + progress * (FALL_END_Y - FALL_START_Y)
 }
 
-// Checks the ship's recorded path (not just a single snapshot) against the object's whole
-// fall trajectory so far. This is what makes collection feel instant: the ship only needs to
-// have grazed the object at ANY point during its fall, not just been in the right spot the
-// moment it reached the bottom. Both axes are required for every object type — a true touch,
-// not just sharing a column — and this must mirror GamePage's client-side prediction exactly,
-// or the two will disagree about outcomes near the tolerance boundary.
-function pathHitsObject(session: SpaceSession, target: SpaceObject, uptoElapsed: number) {
+// Finds the first verified touch, rather than returning only a boolean. The timestamp is
+// important for boosts: checking whether protection was active at request time can turn a rock
+// that was safely crossed earlier into a delayed/invisible crash after the boost expires.
+function objectCollisionAt(session: SpaceSession, target: SpaceObject, uptoElapsed: number) {
   const end = Math.min(target.hitAt, uptoElapsed)
+  if (end < target.spawnAt) return null
   const hitsAt = (t: number) => {
     const pos = positionAt(session, t)
     if (Math.abs(pos.x - target.x) > session.config.hitRadius) return false
     const objY = objectYAt(target, t)
     return Math.abs(pos.y - objY) <= session.config.hitRadiusY
   }
-  for (let t = target.spawnAt; t <= end; t += PATH_CHECK_STEP_MS) {
-    if (hitsAt(t)) return true
+
+  // Include the regular collision grid, the exact end, and every exact movement timestamp.
+  // A movement flush sent at the instant of contact must not fall between two grid samples.
+  const checkpoints = new Set<number>([end])
+  for (let t = target.spawnAt; t <= end; t += PATH_CHECK_STEP_MS) checkpoints.add(t)
+  for (const sample of session.positions) {
+    if (sample.t >= target.spawnAt && sample.t <= end) checkpoints.add(sample.t)
   }
-  return hitsAt(end)
+  for (const checkpoint of [...checkpoints].sort((a, b) => a - b)) {
+    if (hitsAt(checkpoint)) return checkpoint
+  }
+  return null
 }
 
-function resolveOne(session: SpaceSession, target: SpaceObject, nowElapsed: number) {
-  if (target.resolved || session.crashed) return
+function resolveOne(session: SpaceSession, target: SpaceObject, nowElapsed: number, collisionAt: number | null) {
+  if (target.resolved || session.crashed) return false
+  if (collisionAt === null && nowElapsed < target.hitAt) return false
+
   target.resolved = true
-  const evalEnd = Math.min(target.hitAt, nowElapsed)
-  const collided = pathHitsObject(session, target, evalEnd)
-  const boosted = evalEnd < session.boostActiveUntilElapsed
+  const resolvedAt = collisionAt ?? target.hitAt
+  const collided = collisionAt !== null
+  const boosted = collided && resolvedAt < session.boostActiveUntilElapsed
   let outcome: SpaceOutcome = 'dodged'
 
   if (collided && target.type === 'rock' && !boosted) {
@@ -284,13 +431,13 @@ function resolveOne(session: SpaceSession, target: SpaceObject, nowElapsed: numb
     session.score = Math.min(session.config.maximumScore, session.score + 10)
     outcome = 'collected'
   } else if (collided && target.type === 'gem') {
-    session.combo += GEM_COMBO_VALUE
-    session.hits += GEM_COMBO_VALUE
+    session.combo += session.config.gemComboValue
+    session.hits += session.config.gemComboValue
     session.maxCombo = Math.max(session.maxCombo, session.combo)
-    session.score = Math.min(session.config.maximumScore, session.score + 10 * GEM_COMBO_VALUE)
+    session.score = Math.min(session.config.maximumScore, session.score + 10 * session.config.gemComboValue)
     outcome = 'gemmed'
   } else if (collided && target.type === 'boost') {
-    session.boostActiveUntilElapsed = evalEnd + session.config.boostDurationMs
+    session.boostActiveUntilElapsed = Math.max(session.boostActiveUntilElapsed, resolvedAt + session.config.boostDurationMs)
     outcome = 'boosted'
   } else if (target.type === 'rock') {
     outcome = 'dodged'
@@ -300,77 +447,109 @@ function resolveOne(session: SpaceSession, target: SpaceObject, nowElapsed: numb
   }
 
   target.outcome = outcome
+  target.resolvedAt = resolvedAt
+  target.scoreAfter = session.score
+  target.hitsAfter = session.hits
+  target.comboAfter = session.combo
+  return true
 }
 
-// Sweeps every spawned-but-unresolved object: finalizes it as soon as either (a) the ship's
-// path has already touched it, so the player gets credit immediately instead of waiting for
-// it to finish falling, or (b) it has finished falling with no contact, so it's a clean
-// dodge/miss. An object that's still falling with no contact yet is left alone — resolving it
-// early as "missed" would wrongly foreclose a contact that's about to happen.
-function sweepDue(session: SpaceSession, upToElapsed: number) {
-  const pending = session.objects.filter((o) => !o.resolved && o.spawnAt <= upToElapsed).sort((a, b) => a.hitAt - b.hitAt)
-  for (const object of pending) {
-    if (session.crashed) break
-    const fellCompletely = upToElapsed >= object.hitAt
-    const collidedSoFar = !fellCompletely && pathHitsObject(session, object, upToElapsed)
-    if (fellCompletely || collidedSoFar) resolveOne(session, object, upToElapsed)
+type ResolutionCandidate = { object: SpaceObject; collisionAt: number | null; resolvedAt: number }
+
+function compactPositionHistory(session: SpaceSession) {
+  const firstUnresolved = session.objects.find((object) => !object.resolved)
+  if (!firstUnresolved) {
+    session.positions = [session.positions.at(-1)!]
+    return
   }
+
+  // All earlier objects are final. Keep one anchor immediately before the next unresolved
+  // object's spawn plus every later sample; older movement can no longer affect any outcome.
+  let anchorIndex = 0
+  while (anchorIndex + 1 < session.positions.length && session.positions[anchorIndex + 1]!.t <= firstUnresolved.spawnAt) {
+    anchorIndex++
+  }
+  if (anchorIndex > 0) session.positions.splice(0, anchorIndex)
+}
+
+function resolveCandidates(session: SpaceSession, objects: SpaceObject[], upToElapsed: number) {
+  const order = new Map(session.objects.map((object, index) => [object.id, index]))
+  const candidates: ResolutionCandidate[] = []
+  for (const object of objects) {
+    if (object.resolved || object.spawnAt > upToElapsed) continue
+    const collisionAt = objectCollisionAt(session, object, upToElapsed)
+    if (collisionAt === null && upToElapsed < object.hitAt) continue
+    candidates.push({ object, collisionAt, resolvedAt: collisionAt ?? object.hitAt })
+  }
+
+  candidates.sort((a, b) => a.resolvedAt - b.resolvedAt || order.get(a.object.id)! - order.get(b.object.id)!)
+  const resolvedObjects: SpaceObject[] = []
+  for (const candidate of candidates) {
+    if (session.crashed) break
+    if (resolveOne(session, candidate.object, upToElapsed, candidate.collisionAt)) resolvedObjects.push(candidate.object)
+  }
+  compactPositionHistory(session)
+  return resolvedObjects
 }
 
 export function resolveObject(session: SpaceSession, objectId: string) {
   const now = Date.now()
   const elapsed = now - session.startedAt
-  if (session.crashed) throw new Error('GAME_OVER')
-  if (now > session.endsAt + 800) throw new Error('GAME_OVER')
-
   const target = session.objects.find((o) => o.id === objectId)
   if (!target) throw new Error('STALE_OBJECT')
+  // Repeated delivery is safe: return the already-authoritative outcome without changing
+  // counters. The route persists with skipDuplicates, so a network retry never becomes a 500.
+  if (target.resolved) {
+    return { resolvedObject: target, resolvedObjects: [] as SpaceObject[], outcome: target.outcome!, crashed: session.crashed }
+  }
+  if (session.crashed || session.state !== 'active') throw new Error('GAME_OVER')
+  if (now > session.endsAt + 800) throw new Error('GAME_OVER')
   if (!target.resolved && elapsed < target.spawnAt - 80) throw new Error('TOO_EARLY')
 
-  sweepDue(session, elapsed)
+  // Resolve the object explicitly reported by the client and clean up only objects whose fall
+  // is already complete. Previously, every /event request swept collisions for *all* objects
+  // still in flight, so a delayed position could crash the player against a different rock
+  // that the browser had not resolved yet (the reported "invisible rock" symptom).
+  const candidates = session.objects.filter((object) => object === target || (!object.resolved && object.hitAt <= elapsed))
+  const resolvedObjects = resolveCandidates(session, candidates, elapsed)
 
-  return { resolvedObject: target, outcome: target.outcome ?? 'dodged', crashed: session.crashed }
+  return { resolvedObject: target, resolvedObjects, outcome: target.outcome ?? 'pending', crashed: session.crashed }
 }
 
 export function finishSession(gameId: string) {
   const session = sessions.get(gameId)
   if (session) {
-    sessions.delete(gameId)
-    sweepDue(session, Date.now() - session.startedAt)
+    if (session.state !== 'active') throw new Error('SETTLEMENT_IN_PROGRESS')
+    const elapsed = Date.now() - session.startedAt
+    // A manual settle is the synchronization barrier: include every verified contact up to the
+    // click plus every object that has completely left the arena.
+    const resolvedObjects = resolveCandidates(
+      session,
+      session.objects.filter((object) => !object.resolved && object.spawnAt <= elapsed),
+      elapsed,
+    )
     const floor = session.hits
-    const remainingFraction = 1 - session.cashedOutFraction
     const progressiveMultiplier = session.crashed ? 0 : progressiveRoundMultiplier(floor, session.multiplierPerFloor)
-    const prizeCents = session.crashed ? 0 : Math.round(session.stakeAmount * remainingFraction * progressiveMultiplier)
-    const settlementKind = prizeCents > 0 || session.cashedOutAmountCents > 0 ? 'WIN' : 'LOSS'
+    const prizeCents = session.crashed ? 0 : Math.round(session.stakeAmount * progressiveMultiplier)
+    const settlementKind = prizeCents > 0 ? 'WIN' : 'LOSS'
+    session.state = 'settling'
     return {
       session,
       prize: prizeCents,
       multiplier: progressiveMultiplier,
       kind: settlementKind,
       floor,
-      cashedOutAmountCents: session.cashedOutAmountCents,
+      resolvedObjects,
     }
   }
   return null
 }
 
-// Cashes out a fraction of the stake right now, at the live multiplier, while the round
-// keeps running for the rest — mirrors the partial-cashout pattern from crash games like
-// Aviator/Spaceman. Can only be used once per round.
-export function partialCashout(session: SpaceSession, fraction: number) {
-  if (session.crashed) throw new Error('GAME_OVER')
-  if (Date.now() > session.endsAt + 800) throw new Error('GAME_OVER')
-  if (session.cashedOutFraction > 0) throw new Error('ALREADY_CASHED_OUT')
-  if (typeof fraction !== 'number' || Number.isNaN(fraction) || fraction <= 0 || fraction >= 1) throw new Error('INVALID_FRACTION')
+export function resumeSessionAfterFailedSettlement(gameId: string, expectedSession: SpaceSession) {
+  const session = sessions.get(gameId)
+  if (session === expectedSession && session.state === 'settling') session.state = 'active'
+}
 
-  const elapsed = Date.now() - session.startedAt
-  sweepDue(session, elapsed)
-  if (session.crashed) throw new Error('GAME_OVER')
-
-  const liveMultiplier = progressiveRoundMultiplier(session.hits, session.multiplierPerFloor)
-  const amountCents = Math.round(session.stakeAmount * fraction * liveMultiplier)
-  session.cashedOutFraction = fraction
-  session.cashedOutAmountCents = amountCents
-
-  return { amountCents, multiplier: liveMultiplier, remainingFraction: 1 - fraction }
+export function completeSession(gameId: string, expectedSession: SpaceSession) {
+  if (sessions.get(gameId) === expectedSession) sessions.delete(gameId)
 }

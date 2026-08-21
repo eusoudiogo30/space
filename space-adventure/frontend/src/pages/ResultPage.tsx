@@ -35,7 +35,9 @@ function Confetti() {
 
 export function ResultPage({ stats, onAgain, onHome, onCreateAccount }: { stats: FlightStats; user?: User | null; onAgain: () => void; onHome: () => void; onCreateAccount: () => void }) {
   const isFree = stats.stakeAmount === undefined || stats.stakeAmount === 0
-  const finalMultiplier = stats.multiplier ?? Math.min(5, 1.03 ** Math.max(0, stats.hits - 1))
+  const finalMultiplier = stats.multiplier ?? (isFree
+    ? Math.min(25, 1.2 ** Math.max(0, stats.hits))
+    : Math.min(5, 1.03 ** Math.max(0, stats.hits)))
   const prizeValue = (stats.coinsEarned ?? 0) / 100
   const cashedOutValue = (stats.cashedOut ?? 0) / 100
   const totalReceived = prizeValue + cashedOutValue
@@ -73,8 +75,8 @@ export function ResultPage({ stats, onAgain, onHome, onCreateAccount }: { stats:
       <section className={`modal-card result-card ${rewarded ? 'result-card--win' : 'result-card--loss'}`} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <button type="button" className="modal-close" aria-label="Fechar" onClick={onHome}><Icon name="close" size={16} /></button>
         {rewarded && <Confetti />}
-        <span className={`result-badge ${!rewarded ? 'result-badge--danger' : ''}`}>{stats.crashed ? (rewarded ? 'RESGATE GARANTIDO' : 'NAVE PERDIDA') : rewarded ? 'POUSO PREMIADO' : 'VOO ENCERRADO'}</span>
-        <h2>{stats.crashed ? (rewarded ? 'Nave perdida, mas você garantiu parte!' : 'Nave perdida!') : rewarded ? 'Pouso premiado!' : 'Voo encerrado!'}</h2>
+        <span className={`result-badge ${!rewarded ? 'result-badge--danger' : ''}`}>{stats.crashed ? 'NAVE PERDIDA' : rewarded ? 'POUSO PREMIADO' : 'VOO ENCERRADO'}</span>
+        <h2>{stats.crashed ? 'Nave perdida!' : rewarded ? 'Pouso premiado!' : 'Voo encerrado!'}</h2>
         <p>{stats.hits} moedas · combo máximo de {stats.maxCombo}</p>
         <div className={`result-prize-box ${rewarded ? 'result-prize-box--win' : 'result-prize-box--loss'}`}>
           <span>{rewarded ? 'VALOR RECEBIDO' : 'VALOR PERDIDO'}</span>
@@ -82,11 +84,6 @@ export function ResultPage({ stats, onAgain, onHome, onCreateAccount }: { stats:
           {!stats.crashed && (
             <div className="result-breakdown">
               R$ {stakeValue.toFixed(2).replace('.', ',')} <em>×</em> {finalMultiplier.toFixed(2)}x
-            </div>
-          )}
-          {cashedOutValue > 0 && (
-            <div className="result-breakdown">
-              R$ {cashedOutValue.toFixed(2).replace('.', ',')} resgate parcial <em>+</em> R$ {prizeValue.toFixed(2).replace('.', ',')} final
             </div>
           )}
         </div>

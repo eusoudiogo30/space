@@ -1,7 +1,7 @@
 export type IconName =
   | 'dashboard' | 'users' | 'user-plus' | 'deposit' | 'withdrawal' | 'bell' | 'game' | 'sliders'
   | 'settings' | 'gateway' | 'coins' | 'trophy' | 'alert-triangle' | 'list' | 'clock' | 'check-circle'
-  | 'percent' | 'close' | 'logout' | 'upload' | 'gift' | 'star' | 'download' | 'affiliate' | 'link'
+  | 'percent' | 'close' | 'logout' | 'upload' | 'gift' | 'star' | 'download' | 'affiliate' | 'link' | 'eye' | 'eye-off'
 
 export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   const common = {
@@ -90,5 +90,11 @@ export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
 
     case 'link':
       return <svg {...common}><path d="M9.5 14.5 14.5 9.5" /><path d="M11 6.5 12.6 5A4 4 0 1 1 18.3 10.7L16.8 12.2" /><path d="M13 17.5 11.4 19A4 4 0 1 1 5.7 13.3L7.2 11.8" /></svg>
+
+    case 'eye':
+      return <svg {...common}><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" /><circle cx="12" cy="12" r="2.8" /></svg>
+
+    case 'eye-off':
+      return <svg {...common}><path d="m3 3 18 18" /><path d="M10.6 6.1A9.6 9.6 0 0 1 12 6c6 0 9.5 6 9.5 6a16.8 16.8 0 0 1-2.1 2.8M6.1 6.1C3.8 7.7 2.5 12 2.5 12s3.5 6 9.5 6a9.2 9.2 0 0 0 3.1-.5" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></svg>
   }
 }

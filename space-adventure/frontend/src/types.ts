@@ -33,6 +33,7 @@ export type GameConfig = {
   minimumDeposit: string
   maximumDeposit: string
   suggestedBets: string[]
+  freePlayEnabled: boolean
   rtpPercentage: number
   gameDuration: number
   realGameDuration: number
@@ -44,6 +45,8 @@ export type GameConfig = {
   hitRadiusY: number
   boostDurationMs: number
   multiplierPerFloor: number
+  gemUpgradeChance: number
+  gemComboValue: number
   rockFrequency: number
   coinFrequency: number
   boostFrequency: number
@@ -59,6 +62,21 @@ export type ActiveRound = {
   x: number
   y: number
   objects: SkyObject[]
+  startedAt?: number
+  endsAt?: number
+  multiplierPerFloor?: number
+  multiplier?: string
+  hits?: number
+  misses?: number
+  combo?: number
+  maxCombo?: number
+  crashed?: boolean
+  trainingMs?: number
+  hitRadius?: number
+  hitRadiusY?: number
+  boostDurationMs?: number
+  boostRemainingMs?: number
+  gemComboValue?: number
   remainingMs: number
   score: number
 }

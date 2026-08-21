@@ -1,6 +1,4 @@
-import bcrypt from 'bcryptjs'
 import { Router } from 'express'
-import { z } from 'zod'
 import { prisma } from '../db.js'
 import { authenticate } from '../middleware/auth.js'
 import { getPlatformSettings } from '../services/platformSettings.js'
@@ -12,33 +10,6 @@ usersRouter.get('/me', authenticate, asyncHandler(async (req, res) => {
   if (!user) throw new HttpError(404, 'Usuário não encontrado.')
   if (!user.isActive || user.isBlocked) throw new HttpError(403, 'Conta indisponível.')
   res.json({ user: { id: user.id, name: user.name, username: user.username, phone: user.phone, document: user.document, email: user.email, coins: user.coinBalance, bestScore: user.bestScore } })
-}))
-
-const meUpdateSchema = z.object({
-  name: z.string().trim().min(2).max(160).optional(),
-  username: z.string().trim().toLowerCase().min(3).max(32).regex(/^[a-z0-9_.-]+$/, 'Use apenas letras, números, ponto, traço ou underline.').optional(),
-  phone: z.string().trim().transform((value) => value.replace(/\D/g, '')).pipe(z.string().min(10).max(15)).optional(),
-  document: z.string().trim().transform((value) => value.replace(/\D/g, '')).pipe(z.string().regex(/^\d{11}$|^\d{14}$/, 'Documento deve ser um CPF ou CNPJ válido.')).optional(),
-  currentPassword: z.string().min(1).max(72).optional(),
-  newPassword: z.string().min(6).max(72).optional(),
-})
-usersRouter.patch('/me', authenticate, asyncHandler(async (req, res) => {
-  const input = meUpdateSchema.parse(req.body)
-  const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId! } })
-  const data: { name?: string; username?: string; phone?: string; document?: string; passwordHash?: string } = {}
-  if (input.name) data.name = input.name
-  if (input.phone) data.phone = input.phone
-  if (input.document) data.document = input.document
-  if (input.username && input.username !== user.username) {
-    if (await prisma.user.findUnique({ where: { username: input.username } })) throw new HttpError(409, 'Este nome de usuário já está em uso.')
-    data.username = input.username
-  }
-  if (input.newPassword) {
-    if (!input.currentPassword || !(await bcrypt.compare(input.currentPassword, user.passwordHash))) throw new HttpError(401, 'Senha atual incorreta.')
-    data.passwordHash = await bcrypt.hash(input.newPassword, 12)
-  }
-  const updated = await prisma.user.update({ where: { id: user.id }, data, select: { id: true, name: true, username: true, phone: true, document: true, email: true, coinBalance: true, bestScore: true } })
-  res.json({ user: { id: updated.id, name: updated.name, username: updated.username, phone: updated.phone, document: updated.document, email: updated.email, coins: updated.coinBalance, bestScore: updated.bestScore } })
 }))
 
 // GET /api/users/me/summary - Lifetime totals for the player's own profile screen.
@@ -88,26 +59,40 @@ usersRouter.get('/me/affiliate', authenticate, asyncHandler(async (req, res) => 
 // POST /api/users/me/affiliate/redeem - Moves the affiliate's available commission balance into
 // the player's own spendable coin balance (one-shot; there's no partial redemption UI for this).
 usersRouter.post('/me/affiliate/redeem', authenticate, asyncHandler(async (req, res) => {
-  const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId! } })
-  const affiliate = await prisma.affiliate.findUnique({ where: { userId: user.id } })
-  if (!affiliate || affiliate.availableBalance <= 0) throw new HttpError(422, 'Nenhum valor disponível para resgate.')
-  const amount = affiliate.availableBalance
-  await prisma.$transaction([
-    prisma.affiliate.update({ where: { id: affiliate.id }, data: { availableBalance: 0, withdrawnBalance: { increment: amount } } }),
-    prisma.user.update({ where: { id: user.id }, data: { coinBalance: { increment: amount } } }),
-    prisma.coinTransaction.create({ data: { userId: user.id, type: 'AFFILIATE_COMMISSION_REDEEMED', amount, balanceBefore: user.coinBalance, balanceAfter: user.coinBalance + amount, reason: `Resgate de comissão de afiliado (${affiliate.code})` } }),
-  ])
-  res.json({ balance: user.coinBalance + amount, redeemed: amount })
-}))
+  const result = await prisma.$transaction(async (tx) => {
+    const affiliate = await tx.affiliate.findUnique({ where: { userId: req.userId! } })
+    if (!affiliate || affiliate.status !== 'ACTIVE' || affiliate.availableBalance <= 0) throw new HttpError(422, 'Nenhum valor disponível para resgate.')
+    const amount = affiliate.availableBalance
 
-usersRouter.post('/demo-credits', authenticate, asyncHandler(async (req, res) => {
-  const input = z.object({ operation: z.enum(['ADD', 'REMOVE']), amount: z.number().int().min(10).max(1000) }).parse(req.body)
-  const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId! } })
-  const amount = input.operation === 'ADD' ? input.amount : -input.amount
-  if (user.coinBalance + amount < 0) throw new HttpError(422, 'Saldo demo insuficiente.')
-  await prisma.$transaction([
-    prisma.user.update({ where: { id: user.id }, data: { coinBalance: { increment: amount } } }),
-    prisma.coinTransaction.create({ data: { userId: user.id, type: input.operation === 'ADD' ? 'DEMO_CREDIT' : 'DEMO_REDEEM', amount, balanceBefore: user.coinBalance, balanceAfter: user.coinBalance + amount, reason: 'Operação simulada sem valor monetário' } }),
-  ])
-  res.json({ balance: user.coinBalance + amount, disclaimer: 'Créditos demo não possuem valor monetário.' })
+    // Optimistically claim the exact balance snapshot. Two simultaneous taps can both read the
+    // same amount, but only one is allowed to move it into the player's wallet.
+    const claimed = await tx.affiliate.updateMany({
+      where: { id: affiliate.id, availableBalance: amount },
+      data: { availableBalance: { decrement: amount }, withdrawnBalance: { increment: amount } },
+    })
+    if (claimed.count !== 1) throw new HttpError(409, 'O saldo de afiliado mudou. Tente novamente.')
+    await tx.affiliateCommission.updateMany({
+      where: { affiliateId: affiliate.id, status: 'AVAILABLE' },
+      data: { status: 'REDEEMED' },
+    })
+
+    const credited = await tx.user.updateMany({
+      where: { id: req.userId!, isActive: true, isBlocked: false },
+      data: { coinBalance: { increment: amount } },
+    })
+    if (credited.count !== 1) throw new HttpError(403, 'Sua conta não pode resgatar comissões.')
+    const creditedUser = await tx.user.findUniqueOrThrow({ where: { id: req.userId! }, select: { coinBalance: true } })
+    await tx.coinTransaction.create({
+      data: {
+        userId: req.userId!,
+        type: 'AFFILIATE_COMMISSION_REDEEMED',
+        amount,
+        balanceBefore: creditedUser.coinBalance - amount,
+        balanceAfter: creditedUser.coinBalance,
+        reason: `Resgate de comissão de afiliado (${affiliate.code})`,
+      },
+    })
+    return { balance: creditedUser.coinBalance, redeemed: amount }
+  })
+  res.json(result)
 }))

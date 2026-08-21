@@ -17,7 +17,7 @@ export function TutorialPage({ onContinue }: { onContinue: (dontShowAgain: boole
           </li>
           <li>
             <img src="/game/boost.svg" alt="" />
-            <div><strong>Boost</strong><span>3 segundos invencível a pedras</span></div>
+            <div><strong>Boost</strong><span>Proteção temporária contra pedras</span></div>
           </li>
           <li>
             <img src="/game/gem-gold.svg" alt="" />

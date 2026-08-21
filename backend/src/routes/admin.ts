@@ -181,7 +181,7 @@ const settingsSchema = z.object({
   minimumBet: z.number().int().min(1), maximumBet: z.number().int().min(1),
   suggestedBets: z.array(z.number().int().min(1)).min(1).max(12),
   minimumDeposit: z.number().int().min(1), maximumDeposit: z.number().int().min(1),
-  minimumWithdrawal: z.number().int().min(1), maximumWithdrawal: z.number().int().min(1),
+  minimumWithdrawal: z.number().int().min(5000), maximumWithdrawal: z.number().int().min(5000),
   withdrawalFeePercentage: z.number().min(0).max(50),
   signupBonusEnabled: z.boolean(), signupBonusAmount: z.number().int().min(0),
   registrationsEnabled: z.boolean(), depositsEnabled: z.boolean(), withdrawalsEnabled: z.boolean(), maintenanceMode: z.boolean(),
@@ -376,10 +376,30 @@ adminRouter.patch('/users/:id/status', allowRoles('SUPER_ADMIN', 'ADMIN', 'SUPPO
 }))
 adminRouter.post('/users/:id/coins', allowRoles('SUPER_ADMIN', 'ADMIN'), asyncHandler(async (req, res) => {
   const input = z.object({ amount: z.number().int().refine((n) => n !== 0), reason: z.string().min(5), confirmed: z.literal(true) }).parse(req.body)
-  const user = await prisma.user.findUniqueOrThrow({ where: { id: String(req.params.id) } }); const next = user.coinBalance + input.amount
-  if (next < 0) throw new HttpError(422, 'Saldo não pode ficar negativo.')
-  await prisma.$transaction([prisma.user.update({ where: { id: user.id }, data: { coinBalance: next } }), prisma.coinTransaction.create({ data: { userId: user.id, adminId: req.admin!.id, type: 'ADMIN_ADJUSTMENT', amount: input.amount, balanceBefore: user.coinBalance, balanceAfter: next, reason: input.reason } })])
-  await audit(req, { action: 'COINS_ADJUSTED', resource: 'User', resourceId: user.id, previousData: { balance: user.coinBalance }, newData: { balance: next }, reason: input.reason }); res.json({ balance: next })
+  const userId = String(req.params.id)
+  const balance = await prisma.$transaction(async (tx) => {
+    const adjusted = await tx.user.updateMany({
+      where: {
+        id: userId,
+        ...(input.amount < 0 ? { coinBalance: { gte: -input.amount } } : {}),
+      },
+      data: { coinBalance: { increment: input.amount } },
+    })
+    if (adjusted.count !== 1) throw new HttpError(422, 'Usuário não encontrado ou saldo insuficiente para o ajuste.')
+    const updated = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { coinBalance: true } })
+    await tx.coinTransaction.create({ data: {
+      userId,
+      adminId: req.admin!.id,
+      type: 'ADMIN_ADJUSTMENT',
+      amount: input.amount,
+      balanceBefore: updated.coinBalance - input.amount,
+      balanceAfter: updated.coinBalance,
+      reason: input.reason,
+    } })
+    return updated.coinBalance
+  })
+  await audit(req, { action: 'COINS_ADJUSTED', resource: 'User', resourceId: userId, previousData: { balance: balance - input.amount }, newData: { balance }, reason: input.reason })
+  res.json({ balance })
 }))
 adminRouter.post('/users/:id/logout-all', allowRoles('SUPER_ADMIN', 'ADMIN', 'SUPPORT'), asyncHandler(async (_req, res) => res.status(204).end()))
 adminRouter.post('/users/:id/notes', allowRoles('SUPER_ADMIN', 'ADMIN', 'SUPPORT'), asyncHandler(async (req, res) => res.status(201).json({ note: await prisma.userNote.create({ data: { userId: String(req.params.id), adminId: req.admin!.id, content: z.string().min(2).parse(req.body.content) } }) })))
@@ -396,9 +416,12 @@ adminRouter.put('/space-difficulty', allowRoles('SUPER_ADMIN', 'ADMIN'), asyncHa
     rockFrequency: z.number().int().min(5).max(90), coinFrequency: z.number().int().min(5).max(90), boostFrequency: z.number().int().min(0).max(50),
     boostDurationMs: z.number().int().min(500).max(10000), maximumScore: z.number().int().min(100),
     hitRadius: z.number().min(0.02).max(0.3), hitRadiusY: z.number().min(0.02).max(0.3),
+    freePlayEnabled: z.boolean().optional(),
     freeRtpPercentage: z.number().min(0).max(100).optional(),
     shipSpeed: z.number().min(0.3).max(4).optional(),
     multiplierPerFloor: z.number().min(0.01).max(1).optional(),
+    gemUpgradeChance: z.number().min(0).max(1).optional(),
+    gemComboValue: z.number().int().min(2).max(100).optional(),
     boostRockFrequency: z.number().int().min(0).max(100).optional(),
     reason: z.string().trim().min(3).max(300).optional(),
   }).refine((v) => v.maxFallMs >= v.minFallMs, 'A queda máxima deve ser maior ou igual à mínima.')

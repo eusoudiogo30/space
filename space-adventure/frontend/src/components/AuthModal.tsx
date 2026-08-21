@@ -15,7 +15,7 @@ type Props = {
 // player switches between them — only the active/inactive styling and label change.
 const TABS: [mode: 'login' | 'register', activeLabel: string, inactiveLabel: string][] = [
   ['login', 'Entrar', 'Entrar'],
-  ['register', 'Cadastrar', 'Cadastro'],
+  ['register', 'Cadastro', 'Cadastro'],
 ]
 
 // Formats digits into the Brazilian phone pattern as the player types — (DD) NNNNN-NNNN for an
@@ -44,7 +44,7 @@ export function AuthModal({ mode, onModeChange, onClose, onUser }: Props) {
       const username = String(form.get('username') || '')
       const password = String(form.get('password') || '')
       const data = mode === 'register'
-        ? await api.register({ username, password, phone: String(form.get('phone') || ''), name: String(form.get('name') || '') })
+        ? await api.register({ username, password, phone: String(form.get('phone') || '') })
         : await api.login({ username, password }, form.get('rememberMe') === 'on')
       onUser(data.user)
     } catch (err) { setError(err instanceof Error ? err.message : 'Erro inesperado.') } finally { setLoading(false) }
@@ -53,6 +53,7 @@ export function AuthModal({ mode, onModeChange, onClose, onUser }: Props) {
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
       <section className="modal-card auth-card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="modal-close auth-card__close" aria-label="Fechar" onClick={onClose}><Icon name="close" size={16} /></button>
         <div className={`auth-card__banner auth-card__banner--${mode}`} aria-hidden="true" />
 
         <header className="auth-card__head">
@@ -70,7 +71,6 @@ export function AuthModal({ mode, onModeChange, onClose, onUser }: Props) {
               </button>
             ))}
           </div>
-          <button type="button" className="modal-close auth-card__close" aria-label="Fechar" onClick={onClose}><Icon name="close" size={16} /></button>
         </header>
 
         <div className="auth-heading">
@@ -96,9 +96,6 @@ export function AuthModal({ mode, onModeChange, onClose, onUser }: Props) {
               <Icon name={showPassword ? 'eye-off' : 'eye'} size={16} />
             </button>
           </span>
-          {mode === 'register' && (
-            <span className="auth-input"><Icon name="check" size={16} /><input name="name" minLength={2} required autoComplete="name" placeholder="Nome ou Apelido" /></span>
-          )}
           {mode === 'login' && (
             <label className="auth-checkbox">
               <input type="checkbox" name="rememberMe" defaultChecked /> Lembrar de mim

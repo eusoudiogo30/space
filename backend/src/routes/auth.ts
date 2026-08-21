@@ -15,7 +15,7 @@ const phoneSchema = z.string().trim().transform((value) => value.replace(/\D/g, 
 const registerSchema = z.object({
   username: usernameSchema,
   phone: phoneSchema,
-  name: z.string().trim().min(2).max(40),
+  name: z.string().trim().min(2).max(40).optional(),
   password: z.string().min(6).max(72),
   ref: z.string().trim().toLowerCase().max(63).optional(),
 })
@@ -32,7 +32,7 @@ authRouter.post('/register', limiter, asyncHandler(async (req, res) => {
   const grantsBonus = settings.signupBonusEnabled && settings.signupBonusAmount > 0
   const affiliate = input.ref ? await prisma.affiliate.findUnique({ where: { code: input.ref } }) : null
   const user = await prisma.user.create({ data: {
-    name: input.name, username: input.username, phone: input.phone, passwordHash: await bcrypt.hash(input.password, 12),
+    name: input.name || input.username, username: input.username, phone: input.phone, passwordHash: await bcrypt.hash(input.password, 12),
     coinBalance: grantsBonus ? settings.signupBonusAmount : 0, receivedSignupBonus: grantsBonus,
     referredByAffiliateId: affiliate?.status === 'ACTIVE' ? affiliate.id : null,
   } })

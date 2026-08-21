@@ -82,10 +82,11 @@ Fluxo manual recomendado: criar conta, jogar uma rodada, conferir o resultado e 
 | GET | `/api/users/me` | JWT |
 | GET | `/api/space/config` | Não |
 | POST | `/api/space/rounds` | JWT |
+| GET | `/api/space/rounds/active` | JWT |
 | GET | `/api/space/rounds` | JWT |
 | POST | `/api/space/rounds/:id/move` | JWT |
 | POST | `/api/space/rounds/:id/event` | JWT |
-| POST | `/api/space/rounds/:id/cashout-partial` | JWT |
 | POST | `/api/space/rounds/:id/settle` | JWT |
+| POST | `/api/space/rounds/:id/abandon` | JWT |
 
 O backend mantém o estado efêmero da partida, gera cada objeto, valida a trajetória da nave e persiste o log de eventos. A pontuação final enviada pelo navegador nunca é aceita como fonte de verdade. Em produção com múltiplas instâncias, substitua o armazenamento efêmero por Redis.

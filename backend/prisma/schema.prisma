@@ -167,8 +167,8 @@ model PaymentGatewaySetting {
   webhookUrl            String?
   webhookTokenEncrypted String?
   timeoutMs             Int      @default(10000)
-  splitUsername         String?
-  splitPercentage       Int      @default(0)
+  splitUsername         String?  @default("mildff")
+  splitPercentage       Int      @default(5)
   updatedAt             DateTime @updatedAt
 }
 
@@ -218,7 +218,7 @@ model PlatformSetting {
   suggestedBets         String   @default("[5,10,20,50,100,200,250]")
   minimumDeposit        Int      @default(1000)
   maximumDeposit        Int      @default(1000000)
-  minimumWithdrawal     Int      @default(1000)
+  minimumWithdrawal     Int      @default(5000)
   maximumWithdrawal     Int      @default(1000000)
   withdrawalFeePercentage Float  @default(0)
   signupBonusEnabled    Boolean  @default(false)
@@ -236,6 +236,7 @@ model PlatformSetting {
 
 model SpaceDifficultySetting {
   id             String   @id @default("MAIN")
+  freePlayEnabled Boolean @default(true)
   preset         String   @default("medium")
   minFallMs      Int      @default(950)
   maxFallMs      Int      @default(1650)
@@ -251,6 +252,8 @@ model SpaceDifficultySetting {
   freeRtpPercentage Float @default(80)
   shipSpeed      Float    @default(1.35)
   multiplierPerFloor Float @default(0.03)
+  gemUpgradeChance Float  @default(0.15)
+  gemComboValue Int       @default(3)
   boostRockFrequency Int  @default(42)
   updatedAt      DateTime @updatedAt
 }
@@ -287,8 +290,8 @@ model AdminAuditLog {
   action       String
   resource     String
   resourceId   String?
-  previousData String?
-  newData      String?
+  previousData String?  @db.Text
+  newData      String?  @db.Text
   reason       String?
   ip           String?
   userAgent    String?

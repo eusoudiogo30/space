@@ -4,6 +4,8 @@ import { NavLink, Route, Routes, useNavigate } from 'react-router-dom'
 import { api, login, money, session, type Admin } from './api'
 import { Icon, type IconName } from './Icon'
 
+const adminLogoUrl=`${import.meta.env.BASE_URL}logo-topo.png`
+
 // Notificações e Antifraude foram tiradas da navegação a pedido — as páginas continuam existindo
 // (rotas abaixo) para não perder o controle de fraude, só não aparecem mais no menu lateral.
 const menu=[['/','Dashboard','dashboard'],['/usuarios','Usuários','users'],['/depositos','Depósitos','deposit'],['/saques','Saques','withdrawal'],['/afiliados','Afiliados','affiliate'],['/bonus-taxas','Bônus e taxas','gift'],['/economia','Economia','coins'],['/dificuldade-space','Dificuldade — Space','sliders'],['/configuracoes','Configurações gerais','settings'],['/gateway','Gateway & RTP','gateway']] as [string,string,IconName][]
@@ -27,9 +29,9 @@ function ToastHost(){
 }
 
 function Login({onLogin}:{onLogin:(a:Admin)=>void}) {
-  const [error,setError]=useState(''),[loading,setLoading]=useState(false)
-  const submit=async(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();setLoading(true);const f=new FormData(e.currentTarget);try{onLogin(await login(String(f.get('email')),String(f.get('password'))))}catch(x){setError(x instanceof Error?x.message:'Erro')}finally{setLoading(false)}}
-  return <main className="login"><section><div className="brand"><img src="/logo-topo.png" alt="Space Adventure" className="brand-logo"/><span>Admin</span></div><h1>Bem-vindo de volta</h1><p>Acesse o painel operacional.</p><form onSubmit={submit}><label>E-mail<input name="email" type="email" required/></label><label>Senha<input name="password" type="password" minLength={8} required/></label>{error&&<div className="error">{error}</div>}<button disabled={loading}>{loading?'Entrando…':'Entrar no painel'}</button></form></section></main>
+  const [error,setError]=useState(''),[loading,setLoading]=useState(false),[showPassword,setShowPassword]=useState(false)
+  const submit=async(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();setError('');setLoading(true);const f=new FormData(e.currentTarget);try{onLogin(await login(String(f.get('email')),String(f.get('password')),f.get('rememberMe')==='on'))}catch(x){setError(x instanceof Error?x.message:'Erro')}finally{setLoading(false)}}
+  return <main className="login"><section><div className="brand"><img src={adminLogoUrl} alt="Space Adventure" className="brand-logo"/><span>Admin</span></div><h1>Bem-vindo de volta</h1><p>Acesse o painel operacional.</p><form onSubmit={submit}><label>E-mail<input name="email" type="email" autoComplete="email" required/></label><label>Senha<span className="login-password"><input name="password" type={showPassword?'text':'password'} autoComplete="current-password" minLength={8} required/><button type="button" onClick={()=>setShowPassword(v=>!v)} aria-label={showPassword?'Ocultar senha':'Mostrar senha'} title={showPassword?'Ocultar senha':'Mostrar senha'}><Icon name={showPassword?'eye-off':'eye'} size={17}/></button></span></label><label className="login-remember"><input type="checkbox" name="rememberMe" defaultChecked/><span><strong>Lembrar acesso</strong><small>Manter conectado neste dispositivo.</small></span></label>{error&&<div className="error">{error}</div>}<button disabled={loading}>{loading?'Entrando…':'Entrar no painel'}</button></form></section></main>
 }
 function Layout({admin,onLogout}:{admin:Admin;onLogout:()=>void}) {
   const [unread,setUnread]=useState(0)
@@ -38,7 +40,7 @@ function Layout({admin,onLogout}:{admin:Admin;onLogout:()=>void}) {
     load(); const timer=setInterval(load,30000); return ()=>clearInterval(timer)
   },[])
   const visibleMenu=admin.role==='SUPER_ADMIN'?[...menu,['/auditoria','Auditoria','list'] as [string,string,IconName]]:menu
-  return <div className="layout"><ToastHost/><aside><div className="brand"><img src="/logo-topo.png" alt="Space Adventure" className="brand-logo"/><span>Admin</span></div><nav>{visibleMenu.map(([to,label,icon])=><NavLink key={to} to={to} end={to==='/'}><i><Icon name={icon} size={17}/></i>{label}{to==='/notificacoes'&&unread>0&&<em className="nav-badge">{unread}</em>}</NavLink>)}</nav><div className="account"><span>{admin.name[0]}</span><div><b>{admin.name}</b><small>{admin.role}</small></div><button onClick={onLogout} aria-label="Sair"><Icon name="logout" size={16}/></button></div></aside><main className="content"><Routes>
+  return <div className="layout"><ToastHost/><aside><div className="brand"><img src={adminLogoUrl} alt="Space Adventure" className="brand-logo"/><span>Admin</span></div><nav>{visibleMenu.map(([to,label,icon])=><NavLink key={to} to={to} end={to==='/'}><i><Icon name={icon} size={17}/></i>{label}{to==='/notificacoes'&&unread>0&&<em className="nav-badge">{unread}</em>}</NavLink>)}</nav><div className="account"><span>{admin.name[0]}</span><div><b>{admin.name}</b><small>{admin.role}</small></div><button onClick={onLogout} aria-label="Sair"><Icon name="logout" size={16}/></button></div></aside><main className="content"><Routes>
     <Route path="/" element={<Dashboard/>}/>
     <Route path="/usuarios" element={<UsersPage/>}/>
     <Route path="/depositos" element={<FinancePage title="Depósitos" endpoint="/deposits" statuses={['PENDING','PROCESSING','CONFIRMED','REFUNDED','FAILED','CANCELED']} isWithdrawal={false}/>}/>
@@ -163,31 +165,53 @@ function Dashboard(){
 }
 
 // ---------- Dificuldade — Space Adventure ----------
-type SpaceDifficulty={preset:string;minFallMs:number;maxFallMs:number;spawnGapMs:number;rampWindowMs:number;rockFrequency:number;coinFrequency:number;boostFrequency:number;boostDurationMs:number;maximumScore:number;hitRadius:number;hitRadiusY:number;freeRtpPercentage:number;shipSpeed:number;multiplierPerFloor:number;boostRockFrequency:number;updatedAt:string}
-const spaceDifficultyPresets:{key:string;name:string;level:string;color:string;description:string;profile:Omit<SpaceDifficulty,'preset'|'updatedAt'|'freeRtpPercentage'|'shipSpeed'|'multiplierPerFloor'|'boostRockFrequency'>}[]=[
+type SpaceDifficulty={freePlayEnabled:boolean;preset:string;minFallMs:number;maxFallMs:number;spawnGapMs:number;rampWindowMs:number;rockFrequency:number;coinFrequency:number;boostFrequency:number;boostDurationMs:number;maximumScore:number;hitRadius:number;hitRadiusY:number;freeRtpPercentage:number;shipSpeed:number;multiplierPerFloor:number;gemUpgradeChance:number;gemComboValue:number;boostRockFrequency:number;updatedAt:string}
+const spaceDifficultyPresets:{key:string;name:string;level:string;color:string;description:string;profile:Omit<SpaceDifficulty,'freePlayEnabled'|'preset'|'updatedAt'|'freeRtpPercentage'|'shipSpeed'|'multiplierPerFloor'|'gemUpgradeChance'|'gemComboValue'|'boostRockFrequency'>}[]=[
   {key:'easy',name:'Fácil',level:'RISCO BAIXO',color:'#42ca9c',description:'Poucas pedras, muitas moedas. Queda lenta e a velocidade quase não aumenta durante o voo.',profile:{minFallMs:1200,maxFallMs:2000,spawnGapMs:750,rampWindowMs:120000,rockFrequency:18,coinFrequency:72,boostFrequency:10,boostDurationMs:3500,maximumScore:10000,hitRadius:0.13,hitRadiusY:0.10}},
   {key:'medium',name:'Médio',level:'RISCO EQUILIBRADO',color:'#4fc7ff',description:'Mistura equilibrada de pedras e moedas, com aumento de velocidade moderado ao longo do voo.',profile:{minFallMs:950,maxFallMs:1650,spawnGapMs:620,rampWindowMs:60000,rockFrequency:42,coinFrequency:46,boostFrequency:12,boostDurationMs:3000,maximumScore:10000,hitRadius:0.11,hitRadiusY:0.08}},
   {key:'hard',name:'Difícil',level:'RISCO ALTO',color:'#ffb545',description:'Muito mais pedras que moedas, e a velocidade sobe rápido logo nos primeiros segundos do voo.',profile:{minFallMs:650,maxFallMs:1400,spawnGapMs:480,rampWindowMs:20000,rockFrequency:65,coinFrequency:25,boostFrequency:10,boostDurationMs:2000,maximumScore:10000,hitRadius:0.09,hitRadiusY:0.07}},
   {key:'very_hard',name:'Muito Difícil',level:'RISCO MUITO ALTO',color:'#ff8a4a',description:'Quase só pedra na tela, queda bem rápida e velocidade máxima atingida em poucos segundos.',profile:{minFallMs:500,maxFallMs:1100,spawnGapMs:380,rampWindowMs:10000,rockFrequency:75,coinFrequency:17,boostFrequency:8,boostDurationMs:1500,maximumScore:10000,hitRadius:0.08,hitRadiusY:0.06}},
   {key:'extreme',name:'Extra Difícil',level:'RISCO EXTREMO',color:'#ff5c7a',description:'Já começa na velocidade máxima, praticamente sem rampa de aceleração — quase tudo é pedra desde o primeiro segundo.',profile:{minFallMs:380,maxFallMs:800,spawnGapMs:300,rampWindowMs:3000,rockFrequency:82,coinFrequency:12,boostFrequency:6,boostDurationMs:1200,maximumScore:10000,hitRadius:0.07,hitRadiusY:0.055}},
+  {key:'intelligent',name:'Inteligente',level:'PRESSÃO PROGRESSIVA 9 + 1',color:'#b982ff',description:'Em ciclos de 10 rodadas, pedras e velocidade aumentam conforme o multiplicador. Na pressão máxima ainda aparecem moedas, cometas e boosts; uma rodada em cada dez progride mais suavemente até 2,10x.',profile:{minFallMs:650,maxFallMs:1400,spawnGapMs:480,rampWindowMs:20000,rockFrequency:55,coinFrequency:35,boostFrequency:10,boostDurationMs:2000,maximumScore:10000,hitRadius:0.09,hitRadiusY:0.07}},
 ]
 function SpaceDifficultyPage({canEdit}:{canEdit:boolean}){
-  const [setting,setSetting]=useState<SpaceDifficulty|null>(null),[message,setMessage]=useState('')
+  const [setting,setSetting]=useState<SpaceDifficulty|null>(null)
+  const [freeMessage,setFreeMessage]=useState(''),[presetMessage,setPresetMessage]=useState(''),[manualMessage,setManualMessage]=useState('')
   const reload=()=>api<{setting:SpaceDifficulty}>('/space-difficulty').then(d=>setSetting(d.setting))
   useEffect(()=>{reload()},[])
   if(!setting)return <div className="empty">Carregando…</div>
-  const activePreset=spaceDifficultyPresets.find(p=>Object.entries(p.profile).every(([k,v])=>Math.abs((setting as any)[k]-v)<0.0001))?.key
+  const activePreset=spaceDifficultyPresets.some(p=>p.key===setting.preset)
+    ? setting.preset
+    : spaceDifficultyPresets.find(p=>Object.entries(p.profile).every(([k,v])=>Math.abs((setting as any)[k]-v)<0.0001))?.key
+  const cometMultiplier=Math.pow(1+setting.multiplierPerFloor,setting.gemComboValue).toFixed(2)
+  const currentPayload=()=>({
+    preset:setting.preset,minFallMs:setting.minFallMs,maxFallMs:setting.maxFallMs,spawnGapMs:setting.spawnGapMs,rampWindowMs:setting.rampWindowMs,
+    rockFrequency:setting.rockFrequency,coinFrequency:setting.coinFrequency,boostFrequency:setting.boostFrequency,
+    boostDurationMs:setting.boostDurationMs,maximumScore:setting.maximumScore,hitRadius:setting.hitRadius,hitRadiusY:setting.hitRadiusY,
+    freePlayEnabled:setting.freePlayEnabled,freeRtpPercentage:setting.freeRtpPercentage,shipSpeed:setting.shipSpeed,
+    multiplierPerFloor:setting.multiplierPerFloor,gemUpgradeChance:setting.gemUpgradeChance,gemComboValue:setting.gemComboValue,
+    boostRockFrequency:setting.boostRockFrequency,
+  })
   const applyPreset=async(preset:typeof spaceDifficultyPresets[number])=>{
-    setMessage('Salvando…')
+    setPresetMessage('Salvando…')
     try{
       const data=await api<{setting:SpaceDifficulty}>('/space-difficulty',{method:'PUT',body:JSON.stringify({preset:preset.key,...preset.profile,reason:`Aplicação do nível predefinido ${preset.name}`})})
-      setSetting(data.setting);setMessage(`Nível ${preset.name} aplicado.`);notify(`Dificuldade do Space Adventure alterada para ${preset.name}.`)
-    }catch(e){setMessage(e instanceof Error?e.message:'Erro ao salvar.')}
+      setSetting(data.setting);setPresetMessage(`Nível ${preset.name} aplicado.`);notify(`Dificuldade do Space Adventure alterada para ${preset.name}.`)
+    }catch(e){setPresetMessage(e instanceof Error?e.message:'Erro ao salvar.')}
   }
-  const save=async(e:FormEvent<HTMLFormElement>)=>{
+  const saveFreePlay=async(e:FormEvent<HTMLFormElement>)=>{
+    e.preventDefault();const f=new FormData(e.currentTarget);setFreeMessage('Salvando…')
+    try{
+      const data=await api<{setting:SpaceDifficulty}>('/space-difficulty',{method:'PUT',body:JSON.stringify({...currentPayload(),freePlayEnabled:f.get('freePlayEnabled')==='on',freeRtpPercentage:Number(f.get('freeRtpPercentage')),reason:'Ajuste independente da jogada grátis'})})
+      setSetting(data.setting);setFreeMessage('Configuração da jogada grátis salva.');notify('Jogada grátis atualizada.')
+    }catch(err){setFreeMessage(err instanceof Error?err.message:'Erro ao salvar.')}
+  }
+  const saveManual=async(e:FormEvent<HTMLFormElement>)=>{
     e.preventDefault(); const f=new FormData(e.currentTarget)
     const rockFrequency=Number(f.get('rockFrequency')),coinFrequency=Number(f.get('coinFrequency')),boostFrequency=Number(f.get('boostFrequency'))
-    if(rockFrequency+coinFrequency+boostFrequency!==100){setMessage('A soma de pedras, moedas e boosts precisa ser exatamente 100%.');return}
+    if(rockFrequency+coinFrequency+boostFrequency!==100){setManualMessage('A soma de pedras, moedas e boosts precisa ser exatamente 100%.');return}
+    const boostRockFrequency=Number(f.get('boostRockFrequency'))
+    if(boostRockFrequency+coinFrequency+boostFrequency>100){setManualMessage('Pedras perto de boost + moedas + boosts não pode passar de 100%.');return}
     const payload={
       preset:'manual',
       minFallMs:Math.round(Number(f.get('minFallMs'))*1000),maxFallMs:Math.round(Number(f.get('maxFallMs'))*1000),spawnGapMs:Math.round(Number(f.get('spawnGapMs'))*1000),
@@ -195,31 +219,29 @@ function SpaceDifficultyPage({canEdit}:{canEdit:boolean}){
       rockFrequency,coinFrequency,boostFrequency,
       boostDurationMs:Math.round(Number(f.get('boostDurationMs'))*1000),maximumScore:Number(f.get('maximumScore')),
       hitRadius:Number(f.get('hitRadius'))/100,hitRadiusY:Number(f.get('hitRadiusY'))/100,
-      reason:'Ajuste manual da dificuldade do Space Adventure',
-    }
-    setMessage('Salvando…')
-    try{const data=await api<{setting:SpaceDifficulty}>('/space-difficulty',{method:'PUT',body:JSON.stringify(payload)});setSetting(data.setting);setMessage('Ajuste manual salvo.');notify('Dificuldade do Space Adventure atualizada.')}
-    catch(err){setMessage(err instanceof Error?err.message:'Erro ao salvar.')}
-  }
-  const saveFreeRtp=async(e:FormEvent<HTMLFormElement>)=>{
-    e.preventDefault(); const f=new FormData(e.currentTarget)
-    const boostRockFrequency=Number(f.get('boostRockFrequency'))
-    if(boostRockFrequency+setting.coinFrequency+setting.boostFrequency>100){setMessage('Pedras perto de boost + moedas + boosts não pode passar de 100%.');return}
-    const payload={
-      preset:setting.preset,minFallMs:setting.minFallMs,maxFallMs:setting.maxFallMs,spawnGapMs:setting.spawnGapMs,rampWindowMs:setting.rampWindowMs,
-      rockFrequency:setting.rockFrequency,coinFrequency:setting.coinFrequency,boostFrequency:setting.boostFrequency,
-      boostDurationMs:setting.boostDurationMs,maximumScore:setting.maximumScore,hitRadius:setting.hitRadius,hitRadiusY:setting.hitRadiusY,
-      freeRtpPercentage:Number(f.get('freeRtpPercentage')),
+      freePlayEnabled:setting.freePlayEnabled,
+      freeRtpPercentage:setting.freeRtpPercentage,
       shipSpeed:Number(f.get('shipSpeed')),
       multiplierPerFloor:Number(f.get('multiplierPerFloor'))/100,
+      gemUpgradeChance:Number(f.get('gemUpgradeChance'))/100,
+      gemComboValue:Number(f.get('gemComboValue')),
       boostRockFrequency,
-      reason:'Ajuste do RTP e parâmetros do voo grátis / influenciador',
+      reason:'Ajuste manual completo do Space Adventure',
     }
-    setMessage('Salvando…')
-    try{const data=await api<{setting:SpaceDifficulty}>('/space-difficulty',{method:'PUT',body:JSON.stringify(payload)});setSetting(data.setting);setMessage('Parâmetros salvos.');notify('RTP e parâmetros do voo grátis atualizados.')}
-    catch(err){setMessage(err instanceof Error?err.message:'Erro ao salvar.')}
+    setManualMessage('Salvando…')
+    try{const data=await api<{setting:SpaceDifficulty}>('/space-difficulty',{method:'PUT',body:JSON.stringify(payload)});setSetting(data.setting);setManualMessage('Ajuste manual do modo real salvo.');notify('Modo real do Space Adventure atualizado.')}
+    catch(err){setManualMessage(err instanceof Error?err.message:'Erro ao salvar.')}
   }
   return <><Header title="Dificuldade — Space Adventure" subtitle="Mistura de pedras/moedas, velocidade de queda e ritmo de aceleração."/>
+    <section className="panel difficulty-editor">
+      <div className="panel-heading"><h2>Jogada grátis</h2><p>Controle separado da demonstração gratuita. Estas opções não alteram as rodadas com dinheiro real.</p></div>
+      <form className="form-grid settings-grid" onSubmit={saveFreePlay} key={`free-${setting.updatedAt}`}>
+        <label className="switch-row wide"><input type="checkbox" name="freePlayEnabled" disabled={!canEdit} defaultChecked={setting.freePlayEnabled}/><span><strong>Jogada grátis habilitada</strong><small>Desligar bloqueia os botões gratuitos da landing sem afetar partidas com dinheiro.</small></span></label>
+        <label>RTP do jogo grátis (%)<input type="number" name="freeRtpPercentage" min="0" max="100" step="1" disabled={!canEdit} defaultValue={setting.freeRtpPercentage}/><small>Quanto maior, mais favorável tende a ser a mistura de itens no modo grátis.</small></label>
+        <div className="comet-preview"><span>REGRA FIXA DO MODO GRÁTIS</span><strong>+20% por moeda · teto de 25x</strong><small>Essa progressão é exclusiva da demonstração e não altera o modo real.</small></div>
+        {canEdit&&<div className="wide difficulty-save"><button className="button primary">Salvar jogada grátis</button>{freeMessage&&<span className="save-message">{freeMessage}</span>}</div>}
+      </form>
+    </section>
     <section className="panel">
       <div className="panel-heading"><h2>Níveis predefinidos</h2><p>Cada nível define a proporção de pedras x moedas x boosts, a velocidade de queda e quão rápido o voo acelera. O RTP e o selo de Influenciador aplicam só um ajuste fino por cima disso.</p></div>
       <div className="preset-grid">
@@ -241,32 +263,48 @@ function SpaceDifficultyPage({canEdit}:{canEdit:boolean}){
           {canEdit&&<button className={`button ${activePreset===p.key?'secondary':'primary'}`} disabled={activePreset===p.key} onClick={()=>applyPreset(p)}>{activePreset===p.key?'Nível ativo':`Aplicar ${p.name}`}</button>}
         </article>)}
       </div>
+      {presetMessage&&<div className="preset-message save-message">{presetMessage}</div>}
     </section>
-    <section className="panel">
-      <div className="panel-heading"><h2>Ajuste manual</h2><p>Versão atual: {setting.preset}. Atualizado em {dateFmt(setting.updatedAt)}.</p></div>
-      <form className="form-grid settings-grid" onSubmit={save}>
-        <label>Pedras (%)<input type="number" name="rockFrequency" min="5" max="90" disabled={!canEdit} defaultValue={setting.rockFrequency}/><small>Chance de cada objeto que cai ser uma pedra. Bater numa pedra sem boost ativo encerra o voo na hora, sem prêmio.</small></label>
-        <label>Moedas (%)<input type="number" name="coinFrequency" min="5" max="90" disabled={!canEdit} defaultValue={setting.coinFrequency}/><small>Chance de cada objeto ser uma moeda. Cada moeda coletada aumenta o multiplicador do prêmio.</small></label>
-        <label>Boosts (%)<input type="number" name="boostFrequency" min="0" max="50" disabled={!canEdit} defaultValue={setting.boostFrequency}/><small>Chance de cada objeto ser um boost, que deixa a nave invencível a pedras por alguns segundos. Pedras + Moedas + Boosts devem somar exatamente 100%.</small></label>
-        <label>Janela de aceleração (s)<input type="number" name="rampWindowMs" min="5" max="300" disabled={!canEdit} defaultValue={Math.round(setting.rampWindowMs/1000)}/><small>Tempo de voo até a queda atingir a velocidade máxima. Menor = acelera mais rápido.</small></label>
-        <label>Queda mínima (s)<input type="number" name="minFallMs" min="0.3" max="6" step="0.05" disabled={!canEdit} defaultValue={(setting.minFallMs/1000).toFixed(2)}/><small>Quanto tempo um objeto leva para cair do topo até a nave depois que a janela de aceleração termina — a velocidade máxima do voo.</small></label>
-        <label>Queda máxima (s)<input type="number" name="maxFallMs" min="0.3" max="6" step="0.05" disabled={!canEdit} defaultValue={(setting.maxFallMs/1000).toFixed(2)}/><small>Quanto tempo um objeto leva para cair do topo até a nave logo no início do voo, antes de qualquer aceleração.</small></label>
-        <label>Intervalo entre objetos (s)<input type="number" name="spawnGapMs" min="0.15" max="3" step="0.05" disabled={!canEdit} defaultValue={(setting.spawnGapMs/1000).toFixed(2)}/><small>Tempo médio entre o surgimento de um objeto e o próximo no topo da tela. Menor = tela mais cheia e voo mais difícil.</small></label>
-        <label>Duração do boost (s)<input type="number" name="boostDurationMs" min="0.5" max="10" step="0.1" disabled={!canEdit} defaultValue={(setting.boostDurationMs/1000).toFixed(1)}/><small>Por quanto tempo a nave fica invencível a pedras depois de pegar um boost.</small></label>
-        <label>Pontuação máxima<input type="number" name="maximumScore" min="100" disabled={!canEdit} defaultValue={setting.maximumScore}/><small>Teto da pontuação interna da rodada (placar/ranking). Não afeta o valor do prêmio em dinheiro.</small></label>
-        <label>Raio de contato X (%)<input type="number" name="hitRadius" min="2" max="30" step="0.5" disabled={!canEdit} defaultValue={(setting.hitRadius*100).toFixed(1)}/><small>Distância horizontal, em % da largura da tela, que a nave pode estar de um objeto e ainda assim tocar nele. Maior = mais fácil de acertar/desviar.</small></label>
-        <label>Raio de contato Y (%)<input type="number" name="hitRadiusY" min="2" max="30" step="0.5" disabled={!canEdit} defaultValue={(setting.hitRadiusY*100).toFixed(1)}/><small>Distância vertical, em % da altura da tela, que a nave pode estar de um objeto e ainda assim tocar nele. Maior = mais fácil de acertar/desviar.</small></label>
-        {canEdit&&<div className="wide form-actions"><button className="button primary">Salvar ajuste manual</button>{message&&<span className="save-message">{message}</span>}</div>}
-      </form>
-    </section>
-    <section className="panel">
-      <div className="panel-heading"><h2>RTP e parâmetros do voo grátis / influenciador</h2><p>Controla o funil de conversão do modo demo (sem valor real) — "veja quanto você teria ganho" — e o ritmo geral do voo. Independente do RTP das rodadas com valor real, que fica em Gateway/RTP.</p></div>
-      <form className="form-grid settings-grid" onSubmit={saveFreeRtp}>
-        <label>RTP do voo grátis (%)<input type="number" name="freeRtpPercentage" min="0" max="100" step="1" disabled={!canEdit} defaultValue={setting.freeRtpPercentage}/><small>Maior valor = voos de teste terminam com multiplicadores mais altos, com mais frequência.</small></label>
-        <label>Velocidade do astronauta<input type="number" name="shipSpeed" min="0.3" max="4" step="0.05" disabled={!canEdit} defaultValue={setting.shipSpeed}/><small>Quão rápido a nave se move pelos controles do teclado. Maior = mais ágil para desviar.</small></label>
-        <label>Multiplicador por moeda (%)<input type="number" name="multiplierPerFloor" min="1" max="100" step="0.5" disabled={!canEdit} defaultValue={(setting.multiplierPerFloor*100).toFixed(1)}/><small>Quanto o multiplicador de prêmio cresce a cada moeda coletada. Afeta também as rodadas com valor real.</small></label>
-        <label>Pedras perto de boost (%)<input type="number" name="boostRockFrequency" min="0" max="100" step="1" disabled={!canEdit} defaultValue={setting.boostRockFrequency}/><small>Frequência de pedras logo depois que um boost aparece na tela — mais alto deixa o momento do boost mais arriscado.</small></label>
-        {canEdit&&<div className="wide form-actions"><button className="button primary">Salvar parâmetros</button></div>}
+    <section className="panel difficulty-editor">
+      <div className="panel-heading"><h2>Ajuste manual — modo real</h2><p>Configuração detalhada somente das rodadas com dinheiro. Versão atual: {setting.preset}. Atualizado em {dateFmt(setting.updatedAt)}.</p></div>
+      <form className="difficulty-form" onSubmit={saveManual} key={`real-${setting.preset}-${setting.updatedAt}`}>
+        <div className="difficulty-group difficulty-group--comet">
+          <header><span>1</span><div><h3>Prêmios e cometas</h3><p>Defina quanto cada coleta aumenta o valor e como funciona o item raro.</p></div></header>
+          <div className="form-grid settings-grid">
+            <label>Ganho por moeda (%)<input type="number" name="multiplierPerFloor" min="1" max="100" step="0.5" disabled={!canEdit} defaultValue={(setting.multiplierPerFloor*100).toFixed(1)}/><small>Crescimento acumulado do prêmio a cada moeda. Exemplo: 3% transforma 1,00x em 1,03x.</small></label>
+            <label>Chance do cometa aparecer (%)<input type="number" name="gemUpgradeChance" min="0" max="100" step="0.5" disabled={!canEdit} defaultValue={(setting.gemUpgradeChance*100).toFixed(1)}/><small>Percentual das moedas que viram cometas raros. 0% desativa cometas; 100% transforma todas as moedas.</small></label>
+            <label>Valor do cometa (moedas)<input type="number" name="gemComboValue" min="2" max="100" step="1" disabled={!canEdit} defaultValue={setting.gemComboValue}/><small>Quantas moedas são aplicadas de uma vez ao coletar um cometa.</small></label>
+            <div className="comet-preview"><span>EFEITO ATUAL DO COMETA</span><strong>{setting.gemComboValue} moedas = {cometMultiplier}x</strong><small>Com ganho de {(setting.multiplierPerFloor*100).toLocaleString('pt-BR')}% por moeda.</small></div>
+          </div>
+        </div>
+
+        <div className="difficulty-group">
+          <header><span>2</span><div><h3>Itens que aparecem</h3><p>Pedras, moedas e boosts devem somar exatamente 100%.</p></div></header>
+          <div className="form-grid settings-grid">
+            <label>Pedras (%)<input type="number" name="rockFrequency" min="5" max="90" disabled={!canEdit} defaultValue={setting.rockFrequency}/><small>Mais pedras aumentam o risco de colisão.</small></label>
+            <label>Moedas (%)<input type="number" name="coinFrequency" min="5" max="90" disabled={!canEdit} defaultValue={setting.coinFrequency}/><small>Mais moedas aumentam as oportunidades de prêmio e de cometas.</small></label>
+            <label>Boosts (%)<input type="number" name="boostFrequency" min="0" max="50" disabled={!canEdit} defaultValue={setting.boostFrequency}/><small>Chance de proteção temporária contra pedras.</small></label>
+            <label>Pedras após boost (%)<input type="number" name="boostRockFrequency" min="0" max="100" step="1" disabled={!canEdit} defaultValue={setting.boostRockFrequency}/><small>Risco de pedra logo após um boost aparecer.</small></label>
+          </div>
+        </div>
+
+        <details className="difficulty-advanced">
+          <summary>Ajustes avançados de velocidade e colisão</summary>
+          <p>Use apenas quando precisar ir além dos níveis predefinidos.</p>
+          <div className="form-grid settings-grid">
+            <label>Janela de aceleração (s)<input type="number" name="rampWindowMs" min="2" max="300" disabled={!canEdit} defaultValue={Math.round(setting.rampWindowMs/1000)}/><small>Tempo até atingir a velocidade máxima.</small></label>
+            <label>Queda mínima (s)<input type="number" name="minFallMs" min="0.3" max="6" step="0.05" disabled={!canEdit} defaultValue={(setting.minFallMs/1000).toFixed(2)}/><small>Tempo de queda na velocidade máxima.</small></label>
+            <label>Queda máxima (s)<input type="number" name="maxFallMs" min="0.3" max="6" step="0.05" disabled={!canEdit} defaultValue={(setting.maxFallMs/1000).toFixed(2)}/><small>Tempo de queda no início do voo.</small></label>
+            <label>Intervalo entre itens (s)<input type="number" name="spawnGapMs" min="0.15" max="3" step="0.05" disabled={!canEdit} defaultValue={(setting.spawnGapMs/1000).toFixed(2)}/><small>Menor valor deixa a tela mais cheia.</small></label>
+            <label>Duração do boost (s)<input type="number" name="boostDurationMs" min="0.5" max="10" step="0.1" disabled={!canEdit} defaultValue={(setting.boostDurationMs/1000).toFixed(1)}/><small>Tempo de invencibilidade após a coleta.</small></label>
+            <label>Velocidade da nave<input type="number" name="shipSpeed" min="0.3" max="4" step="0.05" disabled={!canEdit} defaultValue={setting.shipSpeed}/><small>Velocidade dos controles por teclado.</small></label>
+            <label>Raio de contato X (%)<input type="number" name="hitRadius" min="2" max="30" step="0.5" disabled={!canEdit} defaultValue={(setting.hitRadius*100).toFixed(1)}/><small>Margem horizontal para uma colisão ou coleta.</small></label>
+            <label>Raio de contato Y (%)<input type="number" name="hitRadiusY" min="2" max="30" step="0.5" disabled={!canEdit} defaultValue={(setting.hitRadiusY*100).toFixed(1)}/><small>Margem vertical para uma colisão ou coleta.</small></label>
+            <label>Pontuação máxima<input type="number" name="maximumScore" min="100" disabled={!canEdit} defaultValue={setting.maximumScore}/><small>Teto interno do placar; não altera o prêmio.</small></label>
+          </div>
+        </details>
+
+        {canEdit&&<div className="difficulty-save"><button className="button primary">Salvar ajuste manual do modo real</button>{manualMessage&&<span className="save-message">{manualMessage}</span>}</div>}
       </form>
     </section>
   </>
@@ -365,7 +403,7 @@ function SettingsPage({canEdit}:{canEdit:boolean}){
         </label>
         <label>Depósito mínimo (R$)<input type="number" min="0.01" step="0.01" disabled={!canEdit} value={settings.minimumDeposit/100} onChange={e=>set('minimumDeposit',Math.round(Number(e.target.value)*100))}/></label>
         <label>Depósito máximo (R$)<input type="number" min="0.01" step="0.01" disabled={!canEdit} value={settings.maximumDeposit/100} onChange={e=>set('maximumDeposit',Math.round(Number(e.target.value)*100))}/></label>
-        <label>Saque mínimo (R$)<input type="number" min="0.01" step="0.01" disabled={!canEdit} value={settings.minimumWithdrawal/100} onChange={e=>set('minimumWithdrawal',Math.round(Number(e.target.value)*100))}/></label>
+        <label>Saque mínimo (R$)<input type="number" min="50" step="0.01" disabled={!canEdit} value={settings.minimumWithdrawal/100} onChange={e=>set('minimumWithdrawal',Math.max(5000,Math.round(Number(e.target.value)*100)))}/><small>O saque mínimo da plataforma é R$ 50,00.</small></label>
         <label>Saque máximo (R$)<input type="number" min="0.01" step="0.01" disabled={!canEdit} value={settings.maximumWithdrawal/100} onChange={e=>set('maximumWithdrawal',Math.round(Number(e.target.value)*100))}/></label>
       </div>
     </section>
@@ -733,44 +771,50 @@ function UserEditor({id,onClose}:{id:string;onClose:()=>void}){
       setMessage('Afiliado atualizado.');notify('Afiliado atualizado.');reload()
     }catch(err){setMessage(err instanceof Error?err.message:'Erro ao salvar.')}
   }
+  const displayName=user.username||user.name
   return <div className="admin-modal-backdrop"><section className="admin-modal user-editor" role="dialog" aria-modal="true">
-    <header className="modal-heading"><div><p className="eyebrow">EDIÇÃO INDIVIDUAL</p><h2>{user.username||user.name}</h2></div><button className="modal-close" onClick={onClose} aria-label="Fechar"><Icon name="close" size={18}/></button></header>
+    <header className="modal-heading user-editor__heading">
+      <div className="user-editor__identity"><span className="user-editor__avatar">{displayName.charAt(0).toUpperCase()}</span><div><p className="eyebrow">EDIÇÃO INDIVIDUAL</p><h2>{displayName}</h2><div className="user-editor__meta"><span className={user.isBlocked?'is-blocked':'is-active'}>{user.isBlocked?'Bloqueado':'Conta ativa'}</span>{user.isInfluencer&&<span>Influenciador</span>}<small>ID {user.id.slice(0,8)}</small></div></div></div>
+      <button className="modal-close" onClick={onClose} aria-label="Fechar"><Icon name="close" size={18}/></button>
+    </header>
     <div className="modal-body">
     {message&&<div className="save-message modal-message">{message}</div>}
-    <div className="user-summary">
-      <article><small>Saldo disponível</small><strong>{money(user.coinBalance)}</strong></article>
-      <article><small>Jogadas</small><strong>{user._count?.games??user.games?.length??0}</strong></article>
-      <article><small>Status</small><strong>{user.isBlocked?'Bloqueado':'Ativo'}{user.isInfluencer?' · Influenciador':''}</strong></article>
-      <article><small>Bônus de cadastro</small><strong>{user.receivedSignupBonus?'Recebido':'—'}</strong></article>
+    <div className="user-summary user-editor__summary">
+      <article className="summary-balance"><span className="user-summary__icon"><Icon name="coins" size={17}/></span><div><small>Saldo disponível</small><strong>{money(user.coinBalance)}</strong></div></article>
+      <article><span className="user-summary__icon"><Icon name="game" size={17}/></span><div><small>Jogadas</small><strong>{user._count?.games??user.games?.length??0}</strong></div></article>
+      <article className={user.isBlocked?'summary-danger':'summary-success'}><span className="user-summary__icon"><Icon name={user.isBlocked?'alert-triangle':'check-circle'} size={17}/></span><div><small>Status</small><strong>{user.isBlocked?'Bloqueado':'Ativo'}</strong></div></article>
+      <article><span className="user-summary__icon"><Icon name="gift" size={17}/></span><div><small>Bônus de cadastro</small><strong>{user.receivedSignupBonus?'Recebido':'Não recebido'}</strong></div></article>
     </div>
-    <div className="editor-grid">
-      <article className="modal-card wide"><div className="panel-heading"><h3>Dados da conta</h3><p>Senha em branco mantém a senha atual.</p></div>
+    <div className="user-editor__workspace">
+      <article className="modal-card user-editor__account"><div className="panel-heading"><div className="panel-heading__icon"><Icon name="users" size={17}/></div><div><h3>Dados da conta</h3><p>Informações pessoais e acesso do usuário.</p></div></div>
         <form className="form-grid compact-form" onSubmit={saveAccount}>
           <label>Nome<input name="name" required maxLength={160} defaultValue={user.name}/></label>
           <label>Usuário<input name="username" maxLength={32} defaultValue={user.username||''}/></label>
           <label>Telefone<input name="phone" maxLength={15} defaultValue={user.phone||''} placeholder="Somente números"/></label>
-          <label className="wide">E-mail<input type="email" name="email" maxLength={254} defaultValue={user.email||''}/></label>
-          <label>Nova senha<input type="password" name="password" minLength={10} maxLength={128} autoComplete="new-password" placeholder="Mínimo de 10 caracteres"/></label>
+          <label>E-mail<input type="email" name="email" maxLength={254} defaultValue={user.email||''}/></label>
+          <label className="wide">Nova senha <small>Deixe em branco para manter a senha atual.</small><input type="password" name="password" minLength={10} maxLength={128} autoComplete="new-password" placeholder="Mínimo de 10 caracteres"/></label>
           <label className="switch-row wide"><input type="checkbox" name="isInfluencer" defaultChecked={user.isInfluencer}/><span><strong>Tornar influenciador</strong><small>As rodadas desta conta passam a usar RTP e mistura de itens mais generosos automaticamente.</small></span></label>
           <div className="wide form-actions"><button className="button primary">Salvar conta</button></div>
         </form>
       </article>
-      <article className="modal-card"><div className="panel-heading"><h3>Status</h3><p>Bloqueio de acesso e exclusão do ranking.</p></div>
+      <div className="user-editor__side">
+      <article className="modal-card"><div className="panel-heading"><div className="panel-heading__icon"><Icon name="sliders" size={17}/></div><div><h3>Status e acesso</h3><p>Controle de acesso e ranking.</p></div></div>
         <form className="stack" onSubmit={saveStatus}>
           <label className="switch-row"><input type="checkbox" name="isBlocked" defaultChecked={user.isBlocked}/><span><strong>Bloqueado</strong><small>Impede login e novas partidas.</small></span></label>
           <label className="switch-row"><input type="checkbox" name="excludedFromRanking" defaultChecked={user.excludedFromRanking}/><span><strong>Excluído do ranking</strong></span></label>
           <button className="button primary">Salvar status</button>
         </form>
       </article>
-      <article className="modal-card"><div className="panel-heading"><h3>Ajustar saldo</h3><p>Gera lançamento auditável no histórico da carteira.</p></div>
+      <article className="modal-card"><div className="panel-heading"><div className="panel-heading__icon"><Icon name="coins" size={17}/></div><div><h3>Ajustar saldo</h3><p>O ajuste fica registrado no histórico.</p></div></div>
         <form className="stack" onSubmit={saveBalance}>
           <label>Novo saldo disponível (R$)<input type="number" name="balance" min="0" step="0.01" required defaultValue={(user.coinBalance/100).toFixed(2)}/></label>
           <button className="button primary">Atualizar saldo</button>
         </form>
       </article>
+      </div>
     </div>
     <article className="modal-card affiliate-card">
-      <div className="panel-heading"><h3>Afiliado</h3><p>Link de indicação e comissão CPA por depósito confirmado.</p></div>
+      <div className="panel-heading"><div className="panel-heading__icon"><Icon name="affiliate" size={17}/></div><div><h3>Programa de afiliados</h3><p>Link de indicação e comissão CPA por depósito confirmado.</p></div></div>
       {user.ownedAffiliate?<>
         <div className="user-summary">
           <article><small>Código</small><strong>{user.ownedAffiliate.code}</strong></article>
@@ -792,7 +836,8 @@ function UserEditor({id,onClose}:{id:string;onClose:()=>void}){
         <div className="wide form-actions"><button className="button primary">Ativar como afiliado</button></div>
       </form>}
     </article>
-    <div className="activity-grid">
+    <div className="user-editor__section-title"><div><p className="eyebrow">HISTÓRICO</p><h3>Atividade da conta</h3></div><span>Registros mais recentes</span></div>
+    <div className="activity-grid user-editor__activity">
       <article className="modal-card"><div className="panel-heading"><h3>Jogadas recentes</h3></div><div className="table-wrap"><table><thead><tr><th>Aposta</th><th>Prêmio</th><th>Status</th><th>Data</th></tr></thead><tbody>
         {(user.games||[]).map(g=><tr key={g.id}><td>{money(g.stakeAmount)}</td><td>{money(g.coinsRewarded)}</td><td><Status value={g.status}/></td><td>{dateFmt(g.startedAt)}</td></tr>)}
         {!user.games?.length&&<tr><td colSpan={4} className="empty">Nenhuma jogada.</td></tr>}

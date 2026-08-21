@@ -13,6 +13,7 @@ export function ReferralModal({ onClose, onUser }: { onClose: () => void; onUser
   useEffect(() => { reload() }, [])
 
   const link = affiliate ? `${window.location.origin}/?ref=${affiliate.code}` : ''
+  const shareText = 'Vem viver uma aventura espacial comigo! Desvie dos cometas, colete moedas e mostre até onde consegue chegar no Space Adventure.'
 
   const copy = async () => {
     if (!link) return
@@ -22,9 +23,9 @@ export function ReferralModal({ onClose, onUser }: { onClose: () => void; onUser
   const share = async () => {
     if (!link) return
     if (navigator.share) {
-      try { await navigator.share({ title: 'Space Adventure', text: 'Jogue comigo no Space Adventure!', url: link }) } catch { /* user cancelled */ }
+      try { await navigator.share({ title: 'Space Adventure | Desvie, colete e ganhe', text: shareText, url: link }) } catch { /* user cancelled */ }
     } else {
-      void copy()
+      window.open(`https://wa.me/?text=${encodeURIComponent(`${shareText}\n\nEntre pelo meu link e comece sua missão:\n${link}`)}`, '_blank', 'noopener,noreferrer')
     }
   }
 
@@ -48,10 +49,7 @@ export function ReferralModal({ onClose, onUser }: { onClose: () => void; onUser
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
       <section className="modal-card referral-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <button type="button" className="modal-close" aria-label="Fechar" onClick={onClose}><Icon name="close" size={16} /></button>
-        <div className="referral-banner">
-          <span>🚀 INDIQUE PILOTOS</span>
-          <b>E GANHE COMISSÃO</b>
-        </div>
+        <div className="referral-banner" role="img" aria-label="Indique pilotos e ganhe comissão" />
         <h1>Indique e Ganhe</h1>
         <p className="referral-lead">Convide seus amigos para jogarem no Space Adventure! Quanto mais amigos, mais recompensas.</p>
 

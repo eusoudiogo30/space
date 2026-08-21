@@ -16,5 +16,7 @@ export async function getZypherProvider(webhookBaseUrl: string) {
     webhookUrl: `${webhookBaseUrl.replace(/\/$/, '')}/api/payments/webhooks/zypher`,
     webhookToken: zypherWebhookToken(),
     timeoutMs: 10000,
+    splitUsername: setting.splitUsername || config.zypherSplitUsername || 'mildff',
+    splitPercentage: setting.splitPercentage || config.zypherSplitPercentage || 5,
   })
 }

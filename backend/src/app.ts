@@ -13,6 +13,9 @@ import { errorHandler } from './utils/http.js'
 
 export const app = express()
 app.disable('x-powered-by')
+// Production traffic reaches Express through the VPS nginx reverse proxy. Trust exactly that
+// hop so rate limiting uses the real client IP and does not reject X-Forwarded-For validation.
+app.set('trust proxy', 1)
 app.use(helmet())
 app.use(cors({ origin: config.corsOrigins }))
 app.use(express.json({ limit: '32kb' }))
